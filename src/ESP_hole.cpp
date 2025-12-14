@@ -7,7 +7,7 @@
 #include <WiFiManager.h>
 
 // Edit these to match your preference
-IPAddress primaryDNS(94, 140, 14, 140); // adguard
+IPAddress primaryDNS(94, 140, 14, 14); // adguard
 IPAddress secondaryDNS(194, 242, 2, 4); // mullvad
 
 const byte DNS_PORT = 53;
