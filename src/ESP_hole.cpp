@@ -23,8 +23,6 @@ bool find_in_rewrite(String domain, IPAddress &ip);
 void setup()
 {
     Serial.begin(9600);
-
-    WiFi.mode(WIFI_AP_STA);
     setup_wifi();
     if (SPIFFS.begin(true)) {
         Serial.println("SPIFFS mounted successfully");
