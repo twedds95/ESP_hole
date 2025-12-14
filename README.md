@@ -41,7 +41,7 @@ Trivial with the PIO extension. But follow [this guide](https://randomnerdtutori
 
 This version of the project does not require any edits to the source code, as after uploading to the ESP you first run will generate a captive portal for you to input the wifi settings you wish to connect this device to. The captive portal SSID is **AutoConnectAP_ESPHOLE**, and has password **ESP32_Connect** (I guess you could modify these if you wish). 
 
-You may also wish to edit the upstream DNS servers used. These can be edited at the top of *src/ESP_hole.cpp* and are currently using two servers with included filtering to block ads, trackers and phishing websites from privacy oriented providers. 
+You may also wish to edit the upstream DNS servers used. These can be edited at the top of *src/ESP_hole.cpp* and are currently using two servers from privacy oriented providers with included filtering to block ads, trackers and phishing websites. 
 
         IPAddress primaryDNS(94, 140, 14, 14); // adguard
         IPAddress secondaryDNS(194, 242, 2, 4); // mullvad
