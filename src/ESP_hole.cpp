@@ -13,7 +13,6 @@ IPAddress secondaryDNS(194, 242, 2, 4); // mullvad
 const byte DNS_PORT = 53;
 DNSServer dnsServer;
 WebServer webServer(80);
-File f;
 
 void setup_wifi();
 bool easy_block(String dom);
@@ -121,22 +120,29 @@ bool find_in_block(String domain)
     char fname[32];
     // Try split file first
     snprintf(fname, sizeof(fname), "/hosts_%d_%c", len, first);
-    File f = SPIFFS.open(fname, "r");
-    if (!f)
+    if (!SPIFFS.exists(fname))
     {
         // Fallback to unsplit file
         snprintf(fname, sizeof(fname), "/hosts_%d", len);
-        f = SPIFFS.open(fname, "r");
     }
+
+    if (!SPIFFS.exists(fname))
+    {
+        // domain length and letter does not match any of our lists
+        return false;
+    }
+
+    File f = SPIFFS.open(fname, "r");
     if (!f)
     {
-        Serial.printf("\nError: file open failed\n");
+        Serial.print("\nError: file open failed\n");
         return false;
     }
     
     f.seek(0, SeekSet);
     char dom_str[domain.length()];
-    sprintf(dom_str, "%s", domain.c_str());
+    sprintf(dom_str, "%s", domain.c_str());    
+    Serial.printf("\nSearching for {%s} in file {%s}\n", dom_str, fname);
     bool found = f.findUntil(dom_str, "@@@");
     f.close();
 
@@ -194,7 +200,6 @@ void loop()
         String dom = dnsServer.getQueryDomainName();
         if (dom.startsWith("www."))
             dom.remove(0, 4);
-        f.setTimeout(5000);
         if ((dom != ""))
         {
             Serial.println();

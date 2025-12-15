@@ -1,6 +1,6 @@
 # Ad Blocker for ESP
 
-ESP_hole is a low power, low feature, ad blocking DNS server for the ESP32. 
+ESP_hole is a low power, low feature, ad blocking DNS server for the ESP. 
 
 I was heavily inspired by [Rubfi's esphole project](https://github.com/rubfi/esphole) also made for the ESP.
 
