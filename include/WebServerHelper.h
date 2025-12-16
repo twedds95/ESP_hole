@@ -1,7 +1,9 @@
 #include <Arduino.h>
 
 #define HOURS 24
-#define TOP_N 20
+// track 15 domains but only show top 10 in Dashboard
+#define TOP_N 10
+#define TOP_N_TRACKED 15
 #define MAX_DOMAIN_LEN 48
 
 // #Persisted Stats

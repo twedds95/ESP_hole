@@ -5,8 +5,8 @@ Preferences prefs;
 PersistedStats stats;
 
 // Data
-DomainStat topBlocked[TOP_N];
-DomainStat topQueried[TOP_N];
+DomainStat topBlocked[TOP_N_TRACKED];
+DomainStat topQueried[TOP_N_TRACKED];
 uint8_t currentHour = 0;
 unsigned long lastHourTick = 0;
 
@@ -140,7 +140,7 @@ void recordQuery(bool blocked, const char *domain)
 void updateTop(DomainStat *arr, const char *domain)
 {
   // Check if exists
-  for (int i = 0; i < TOP_N; i++)
+  for (int i = 0; i < TOP_N_TRACKED; i++)
   {
     if (arr[i].count && strcmp(arr[i].domain, domain) == 0)
     {
@@ -150,7 +150,7 @@ void updateTop(DomainStat *arr, const char *domain)
   }
 
   // Find empty slot
-  for (int i = 0; i < TOP_N; i++)
+  for (int i = 0; i < TOP_N_TRACKED; i++)
   {
     if (arr[i].count == 0)
     {
@@ -162,7 +162,7 @@ void updateTop(DomainStat *arr, const char *domain)
 
   // Replace smallest
   int minIdx = 0;
-  for (int i = 1; i < TOP_N; i++)
+  for (int i = 1; i < TOP_N_TRACKED; i++)
   {
     if (arr[i].count < arr[minIdx].count)
       minIdx = i;
