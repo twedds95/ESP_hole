@@ -66,7 +66,6 @@ bool find_in_block(const char *domain)
     }
 
     f.seek(0, SeekSet);
-    Serial.printf("\nSearching for {%s} in file {%s}\n", domain, fname);
     bool found = f.findUntil(domain, "@@@");
     f.close();
 
@@ -138,18 +137,17 @@ IPAddress handleDNSRequest(String dom)
         Serial.print(" | IP:");
         Serial.print(ip);
         Serial.printf("\nRewrite took %lu ms\n", rewriteMs);
-        recordQuery(false, dom.c_str());
+        recordQuery(false, dom.c_str(), rewriteMs);
         return ip;
     }
 
-    oMillis = millis();
     bool block = easy_block(dom.c_str());
     block = block || find_in_block(dom.c_str());
     uint32_t proccessMs = millis() - oMillis;
     if (block)
     {
         Serial.printf(" Blocked | Find took %lu ms\n", proccessMs);
-        recordQuery(true, dom.c_str());
+        recordQuery(true, dom.c_str(), proccessMs);
         return IPAddress(0, 0, 0, 0);
     }
 
@@ -158,8 +156,17 @@ IPAddress handleDNSRequest(String dom)
     uint32_t resolvMs = millis() - oMillis;
     Serial.print(" | IP:");
     Serial.print(ip);
-    Serial.printf("\nResolv took %lu ms", resolvMs);
-    Serial.printf(" | Find took %lu ms\n", proccessMs);
-    recordQuery(false, dom.c_str());
+    if (ip == IPAddress(0, 0, 0, 0))
+    {
+        Serial.printf("\n Block by upstream took %lu ms", resolvMs);
+        Serial.printf(" | Find took %lu ms\n", proccessMs);
+        recordQuery(true, dom.c_str(), resolvMs + proccessMs);
+    }
+    else
+    {
+        Serial.printf("\nResolv took %lu ms", resolvMs);
+        Serial.printf(" | Find took %lu ms\n", proccessMs);
+        recordQuery(false, dom.c_str(), resolvMs + proccessMs);
+    }
     return ip;
 }

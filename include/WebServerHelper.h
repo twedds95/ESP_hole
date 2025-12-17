@@ -1,9 +1,9 @@
 #include <Arduino.h>
 
 #define HOURS 24
-// track 15 domains but only show top 10 in Dashboard
+// track more domains but only show top 10 in Dashboard
 #define TOP_N 10
-#define TOP_N_TRACKED 15
+#define TOP_N_TRACKED 50
 #define MAX_DOMAIN_LEN 48
 
 // #Persisted Stats
@@ -16,6 +16,8 @@ struct HourStats
 {
   uint32_t queries = 0;
   uint32_t blocked = 0;
+  uint32_t hourResponseTime = 0;
+  uint32_t hourBlockTime = 0;
 };
 
 struct PersistedStats
@@ -23,6 +25,8 @@ struct PersistedStats
   uint8_t version = STATS_VERSION;
   uint32_t _totalQueries;
   uint32_t _totalBlocked;
+  uint64_t _responseTime;
+  uint64_t _blockTime;
   HourStats _hourly[HOURS];
 };
 
@@ -35,13 +39,12 @@ struct DomainStat
 void loadPersistedStats();
 void savePersistedStats();
 
-#define totalQueries stats._totalQueries
-#define totalBlocked stats._totalBlocked
-#define hourly stats._hourly
-
-
-void appendTopArray(String &json, DomainStat *arr);
+void appendTopArray(String &json, DomainStat arr[]);
 String getJsonStats();
-void handleHourRotation();
-void recordQuery(bool blocked, const char *domain);
-void updateTop(DomainStat *arr, const char *domain);
+void handleTimeSensitiveRotations();
+void decayTopDomains(DomainStat arr[]);
+void recordQuery(bool blocked, const char *domain, uint32_t respTime);
+void sanitizeDomain(const char *dom, char *domain);
+void updateTop(DomainStat arr[], const char *dom, uint32_t newTotal);
+void updateTopBlocked(const char *domain);
+void updateTopQueried(const char *domain);

@@ -23,6 +23,8 @@ WebServer server(80);
 void handleRoot();
 void handleStats();
 void setup_wifi();
+// this setting has been very stable for the S2 Mini, YMMV
+wifi_power_t WiFiTxPower = WIFI_POWER_15dBm;
 
 void handleRoot()
 {
@@ -61,6 +63,8 @@ void setup()
     server.on("/", handleRoot);
     server.on("/stats", handleStats);
     server.begin();
+    Serial.println("ESP_hole Dashboard started on:");
+    Serial.println(WiFi.localIP());
 }
 
 void setup_wifi()
@@ -93,16 +97,16 @@ void setup_wifi()
         Serial.println("");
         Serial.print("WiFi connected | IP address: ");
         Serial.println(WiFi.localIP());
-
+        WiFi.setTxPower(WiFiTxPower);
         // update upstream DNS
-        WiFi.config(WiFi.localIP(), WiFi.gatewayIP(), WiFi.subnetMask(), primaryDNS, secondaryDNS);
+        WiFi.config(WiFi.localIP(), WiFi.gatewayIP(), WiFi.subnetMask(), primaryDNS, secondaryDNS);        
     }
 }
 
 void loop()
 {
     server.handleClient();
-    handleHourRotation();
+    handleTimeSensitiveRotations();
     int dnsOK = dnsServer.processNextRequest();
     if (dnsOK == 0)
     {

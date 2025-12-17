@@ -1,15 +1,21 @@
 #include <WebServerHelper.h>
 
-// #Persisted Stats
-Preferences prefs;
-PersistedStats stats;
-
 // Data
 DomainStat topBlocked[TOP_N_TRACKED];
 DomainStat topQueried[TOP_N_TRACKED];
 uint8_t currentHour = 0;
 unsigned long lastHourTick = 0;
+unsigned long lastPersistedTick = 0;
 
+// #Persisted Stats
+Preferences prefs;
+PersistedStats stats;
+
+#define totalQueries stats._totalQueries
+#define totalBlocked stats._totalBlocked
+#define totalResponseTime stats._responseTime
+#define totalBlockTime stats._blockTime
+#define hourly stats._hourly
 
 void savePersistedStats()
 {
@@ -41,28 +47,54 @@ void loadPersistedStats()
   prefs.end();
 }
 
-// Data
-void handleHourRotation()
+void handleTimeSensitiveRotations()
 {
   unsigned long now = millis();
+  if (now - lastPersistedTick > 600000UL) // persist data every 10mins
+  {
+    lastPersistedTick = now;
+    savePersistedStats();
+  }
+
   if (now - lastHourTick < 3600000UL)
   {
     return;
   }
 
-  savePersistedStats();
-
   lastHourTick = now;
   currentHour = (currentHour + 1) % HOURS;
 
+  decayTopDomains(topBlocked);
+  decayTopDomains(topQueried);
+
   totalQueries -= hourly[currentHour].queries;
   totalBlocked -= hourly[currentHour].blocked;
+  totalResponseTime -= hourly[currentHour].hourResponseTime;
+  totalBlockTime -= hourly[currentHour].hourBlockTime;
 
   hourly[currentHour].queries = 0;
   hourly[currentHour].blocked = 0;
+  hourly[currentHour].hourResponseTime = 0;
+  hourly[currentHour].hourBlockTime = 0;
 }
 
-void appendTopArray(String &json, DomainStat *arr)
+void decayTopDomains(DomainStat arr[])
+{
+  double_t hourPercentEstimate = (double_t)hourly[currentHour].queries / (double_t)totalQueries;
+  for (int i = 0; i < TOP_N_TRACKED; i++)
+  {
+    if (arr[i].count <= 0)
+    {
+      continue;
+    }
+
+    double_t domPercentEstimate = (double_t)arr[i].count / (double_t)totalQueries;
+    uint32_t decayAmount = (uint32_t)(domPercentEstimate * hourPercentEstimate * arr[i].count);
+    arr[i].count -= decayAmount;
+  }
+}
+
+void appendTopArray(String &json, DomainStat arr[])
 {
   json += "[";
   bool first = true;
@@ -87,6 +119,8 @@ String getJsonStats()
 
   json += "\"total\":" + String(totalQueries) + ",";
   json += "\"blocked\":" + String(totalBlocked) + ",";
+  json += "\"responseTime\":" + String(totalResponseTime) + ",";
+  json += "\"blockTime\":" + String(totalBlockTime) + ",";
 
   // Memory
   json += "\"heap\":{";
@@ -101,7 +135,8 @@ String getJsonStats()
     int idx = (currentHour + i + 1) % HOURS;
     json += "{";
     json += "\"q\":" + String(hourly[idx].queries) + ",";
-    json += "\"b\":" + String(hourly[idx].blocked);
+    json += "\"b\":" + String(hourly[idx].blocked) + ",";
+    json += "\"t\":" + String(hourly[idx].hourResponseTime);
     json += "}";
     if (i < HOURS - 1)
       json += ",";
@@ -117,10 +152,14 @@ String getJsonStats()
   json += "}";
 
   json += "}";
+
+  Serial.println("Sending JSON to Dashboard:");
+  Serial.println(json);
+
   return json;
 }
 
-void recordQuery(bool blocked, const char *domain)
+void recordQuery(bool blocked, const char *domain, uint32_t respTime)
 {
   totalQueries++;
   hourly[currentHour].queries++;
@@ -129,16 +168,49 @@ void recordQuery(bool blocked, const char *domain)
   {
     totalBlocked++;
     hourly[currentHour].blocked++;
-    updateTop(topBlocked, domain);
+    totalBlockTime += respTime;
+    hourly[currentHour].hourBlockTime += respTime;
+    updateTopBlocked(domain);
   }
   else
   {
-    updateTop(topQueried, domain);
+    totalResponseTime += respTime;
+    hourly[currentHour].hourResponseTime += respTime;
+    updateTopQueried(domain);
   }
 }
 
-void updateTop(DomainStat *arr, const char *domain)
+void sanitizeDomain(const char *in, char *domain)
 {
+  size_t used = 0;
+  while (*in && used + 1 < MAX_DOMAIN_LEN)
+  {
+    char c = *in++;
+    if ((c >= 'a' && c <= 'z') ||
+        (c >= '0' && c <= '9') ||
+        c == '-' || c == '.')
+    {
+      domain[used++] = c;
+    }
+  }
+
+  domain[used] = '\0';
+}
+
+void updateTopBlocked(const char *domain)
+{
+  updateTop(topBlocked, domain, totalBlocked);
+}
+
+void updateTopQueried(const char *domain)
+{
+  updateTop(topQueried, domain, totalQueries - totalBlocked);
+}
+
+void updateTop(DomainStat arr[], const char *dom, uint32_t newTotal)
+{
+  char domain[MAX_DOMAIN_LEN];
+  sanitizeDomain(dom, domain);
   // Check if exists
   for (int i = 0; i < TOP_N_TRACKED; i++)
   {
