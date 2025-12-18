@@ -1,35 +1,35 @@
 #include <DNSHelper.h>
 
+#include <BloomCheck.h>
 #include <SPIFFS.h>
 #include <WebServerHelper.h>
 #include <WiFi.h>
 
+QueueHandle_t dnsLogQueue;
+
 bool easy_block(const char *domain)
 {
-    String list[] = {
+    static const char *patterns[] = {
         "ad.",
-        "ads.",
-        "adserver",
-        "adservers",
-        "adtrack",
-        "adtracker",
-        "adservice",
-        "adservices",
-        "advert",
-        "advertising",
-        "analytics",
-        "applytics",
-        "beacons",
-        "logging",
-        "pub.",
-        "tracker",
-        "tracking",
-        "telemetry",
-
+        ".ad.",
+        ".ads.",
+        "adserver.",
+        "adservers.",
+        "adtrack.",
+        "adtracker.",
+        "adservice.",
+        "adservices.",
+        "analytics.",
+        "telemetry.",
+        "tracker.",
+        "tracking.",
+        "beacon.",
+        "logging."
     };
-    for (auto &text : list)
+
+    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++)
     {
-        if (strstr(domain, text.c_str()))
+        if (strstr(domain, patterns[i]) != nullptr)
         {
             return true;
         }
@@ -37,6 +37,7 @@ bool easy_block(const char *domain)
 
     return false;
 }
+
 
 bool find_in_block(const char *domain)
 {
@@ -137,17 +138,20 @@ IPAddress handleDNSRequest(String dom)
         Serial.print(" | IP:");
         Serial.print(ip);
         Serial.printf("\nRewrite took %lu ms\n", rewriteMs);
-        recordQuery(false, dom.c_str(), rewriteMs);
+        enqueueDnsLog(false, dom.c_str(), rewriteMs);
         return ip;
     }
 
-    bool block = easy_block(dom.c_str());
-    block = block || find_in_block(dom.c_str());
+    bool block = false;
+    if (bloomCheck(dom.c_str()))
+    {
+        block = easy_block(dom.c_str()) || find_in_block(dom.c_str());
+    }
     uint32_t proccessMs = millis() - oMillis;
     if (block)
     {
         Serial.printf(" Blocked | Find took %lu ms\n", proccessMs);
-        recordQuery(true, dom.c_str(), proccessMs);
+        enqueueDnsLog(true, dom.c_str(), proccessMs);
         return IPAddress(0, 0, 0, 0);
     }
 
@@ -160,13 +164,56 @@ IPAddress handleDNSRequest(String dom)
     {
         Serial.printf("\n Block by upstream took %lu ms", resolvMs);
         Serial.printf(" | Find took %lu ms\n", proccessMs);
-        recordQuery(true, dom.c_str(), resolvMs + proccessMs);
+        enqueueDnsLog(true, dom.c_str(), resolvMs + proccessMs);
     }
     else
     {
         Serial.printf("\nResolv took %lu ms", resolvMs);
         Serial.printf(" | Find took %lu ms\n", proccessMs);
-        recordQuery(false, dom.c_str(), resolvMs + proccessMs);
+        enqueueDnsLog(false, dom.c_str(), resolvMs + proccessMs);
     }
+    
     return ip;
+}
+
+void setupLogQueue()
+{
+    dnsLogQueue = xQueueCreate(64, sizeof(DnsLogEvent));
+
+    xTaskCreatePinnedToCore(
+        statsTask,
+        "stats",
+        4096,
+        nullptr,
+        1,
+        nullptr,
+        0 // core 0 (DNS usually runs on core 1)
+    );
+}
+
+void statsTask(void *arg)
+{
+    DnsLogEvent ev;
+
+    for (;;)
+    {
+        if (xQueueReceive(dnsLogQueue, &ev, portMAX_DELAY))
+        {
+            recordQuery(ev.blocked, ev.domain, ev.durationMs);
+        }
+    }
+}
+
+void enqueueDnsLog(bool blocked, const char *domain, uint32_t ms)
+{
+    if (!dnsLogQueue)
+        return;
+
+    DnsLogEvent ev{};
+    ev.blocked = blocked;
+    ev.durationMs = ms;
+    strncpy(ev.domain, domain, MAX_DOMAIN_LEN - 1);
+
+    // Do NOT block DNS if queue is full
+    xQueueSend(dnsLogQueue, &ev, 0);
 }

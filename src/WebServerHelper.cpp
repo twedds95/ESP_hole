@@ -4,7 +4,6 @@
 DomainStat topBlocked[TOP_N_TRACKED];
 DomainStat topQueried[TOP_N_TRACKED];
 uint8_t currentHour = 0;
-unsigned long lastHourTick = 0;
 unsigned long lastPersistedTick = 0;
 
 // #Persisted Stats
@@ -16,6 +15,7 @@ PersistedStats stats;
 #define totalResponseTime stats._responseTime
 #define totalBlockTime stats._blockTime
 #define hourly stats._hourly
+#define lastHourTick stats._lastHourTick
 
 void savePersistedStats()
 {

@@ -100,6 +100,50 @@ def normalize_domain(line: str) -> str | None:
     return domain
 
 
+def build_bloom():
+    import hashlib
+    # ---- CONFIG ----
+    BITS = 2_500_000
+    HASHES = 5
+    OUT_FILE =  DATA_DIR / f"bloom.bin"
+    HOSTS_GLOB = "hosts_*"
+
+    BYTES = (BITS + 7) // 8
+    bitarray = bytearray(BYTES)
+
+
+    def set_bit(i):
+        bitarray[i >> 3] |= 1 << (i & 7)
+
+
+    def hashes(domain: str):
+        h = hashlib.blake2b(domain.encode("utf-8"), digest_size=16).digest()
+        for i in range(HASHES):
+            yield int.from_bytes(h[i * 2 : i * 2 + 2], "little") % BITS
+
+
+    count = 0
+    for path in DATA_DIR.glob(HOSTS_GLOB):
+        if not path.is_file():
+            continue
+
+        with path.open("r", encoding="utf-8") as f:
+            for line in f:
+                d = line.strip()
+                if not d or d == ",@@@":
+                    continue
+
+                for h in hashes(d):
+                    set_bit(h)
+
+                count += 1
+
+    with open(OUT_FILE, "wb") as f:
+        f.write(bitarray)
+
+    print(f"Bloom built: {count} domains")
+    print(f"Size: {BYTES / 1024:.1f} KB")
+
 # ==========================
 # Main
 # ==========================
@@ -191,7 +235,8 @@ def main():
 
     print(f"✔ Generated {file_count} host files")
     print(f"✔ Output written to {DATA_DIR.resolve()}")
-
+    
+    build_bloom()
 
 if __name__ == "__main__":
     main()

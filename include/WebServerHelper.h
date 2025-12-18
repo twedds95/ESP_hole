@@ -6,6 +6,13 @@
 #define TOP_N_TRACKED 50
 #define MAX_DOMAIN_LEN 48
 
+struct DnsLogEvent
+{
+  uint32_t durationMs;
+  bool blocked;
+  char domain[MAX_DOMAIN_LEN];
+};
+
 // #Persisted Stats
 #include <Preferences.h>
 #define STATS_VERSION 1
@@ -28,6 +35,7 @@ struct PersistedStats
   uint64_t _responseTime;
   uint64_t _blockTime;
   HourStats _hourly[HOURS];
+  unsigned long _lastHourTick;
 };
 
 struct DomainStat

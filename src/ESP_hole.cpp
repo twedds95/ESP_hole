@@ -7,6 +7,7 @@
 #include <WiFiManager.h>
 
 // customs
+#include <BloomCheck.h>
 #include <Dashboard.cpp>
 #include <DNSHelper.h>
 #include <DNSServer.h>
@@ -16,15 +17,16 @@
 IPAddress primaryDNS(94, 140, 14, 14);  // adguard
 IPAddress secondaryDNS(194, 242, 2, 4); // mullvad
 
+// this setting has been very stable for the S2 Mini, YMMV
+wifi_power_t WiFiTxPower = WIFI_POWER_15dBm;
+
 const byte DNS_PORT = 53;
 DNSServer dnsServer;
 WebServer server(80);
 
 void handleRoot();
 void handleStats();
-void setup_wifi();
-// this setting has been very stable for the S2 Mini, YMMV
-wifi_power_t WiFiTxPower = WIFI_POWER_15dBm;
+void setupWifi();
 
 void handleRoot()
 {
@@ -39,7 +41,7 @@ void handleStats()
 void setup()
 {
     Serial.begin(9600);
-    setup_wifi();
+    setupWifi();
     if (SPIFFS.begin(true))
     {
         Serial.println("SPIFFS mounted successfully");
@@ -53,6 +55,8 @@ void setup()
         return;
     }
 
+    setupBloom();
+    setupLogQueue();
     Serial.println("DNS Server ready");
     Serial.println("Upstream DNSs:");
     Serial.println(WiFi.dnsIP(0));
@@ -67,7 +71,7 @@ void setup()
     Serial.println(WiFi.localIP());
 }
 
-void setup_wifi()
+void setupWifi()
 {
     delay(10);
     Serial.println();
