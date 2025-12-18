@@ -110,3 +110,9 @@ In the serial monitor the debug information is shown:
 
     Domain: home.page.com | IP:192.168.0.150
     Rewrite took 37 ms
+
+
+## TODOS:
+
+1. Add a whitelist option to the dashboard
+    - needed for if a false positive affects an important domain
