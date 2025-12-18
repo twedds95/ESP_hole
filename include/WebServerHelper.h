@@ -28,7 +28,7 @@ struct PersistedStats
   uint64_t _responseTime;
   uint64_t _blockTime;
   HourStats _hourly[HOURS];  
-  unsigned long _lastHourTick = 0;
+  uint8_t _currentHour;
 };
 
 struct DomainStat

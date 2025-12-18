@@ -4,6 +4,7 @@
 DomainStat topBlocked[TOP_N_TRACKED];
 DomainStat topQueried[TOP_N_TRACKED];
 uint8_t currentHour = 0;
+unsigned long lastHourTick = 0;
 unsigned long lastPersistedTick = 0;
 
 // #Persisted Stats
@@ -15,7 +16,7 @@ PersistedStats stats;
 #define totalResponseTime stats._responseTime
 #define totalBlockTime stats._blockTime
 #define hourly stats._hourly
-#define lastHourTick stats._lastHourTick
+#define currentHour stats._currentHour
 
 void savePersistedStats()
 {
@@ -163,6 +164,8 @@ void recordQuery(bool blocked, const char *domain, uint32_t respTime)
 {
   totalQueries++;
   hourly[currentHour].queries++;
+  totalResponseTime += respTime;
+  hourly[currentHour].hourResponseTime += respTime;
 
   if (blocked)
   {
@@ -174,8 +177,6 @@ void recordQuery(bool blocked, const char *domain, uint32_t respTime)
   }
   else
   {
-    totalResponseTime += respTime;
-    hourly[currentHour].hourResponseTime += respTime;
     updateTopQueried(domain);
   }
 }

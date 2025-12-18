@@ -146,13 +146,12 @@
 
           document.getElementById('total').textContent = s.total;
           document.getElementById('responseTime').textContent =
-            ((s.total - s.blocked) > 0 ?
-              (Math.round(s.responseTime / (s.total - s.blocked))).toFixed(2) : '0') + ' ms';
-          document.getElementById('blockTime').textContent = (Math.round(s.blockTime / s.blocked)).toFixed(2) + ' ms';
+            Math.round(s.responseTime / s.total).toFixed(2) + ' ms';
+          document.getElementById('blockTime').textContent = (s.blocked > 0 ?
+            (Math.round(s.blockTime / s.blocked)).toFixed(2) : '0') + ' ms';
           document.getElementById('blocked').textContent = s.blocked;
           document.getElementById('percent').textContent =
-            s.total ? ((s.blocked / s.total) * 100).toFixed(1) + '%' : '0%';
-
+            (s.blocked / s.total * 100).toFixed(1) + '%';
 
           drawChart(s.hours);
           lastHours = s.hours;
@@ -194,7 +193,7 @@
       });
 
       function drawChart(hours) {
-        const width  = canvasSize.width;
+        const width = canvasSize.width;
         const height = canvasSize.height;
         ctx.clearRect(0, 0, width, height);
 
@@ -244,14 +243,24 @@
         ctx.font = "11px system-ui";
         ctx.textBaseline = "middle";
 
-        // Left labels
-        ctx.textAlign = "right";
-        ctx.fillText(maxQ, pad.l - 6, pad.t + 6);
-        ctx.fillText("0", pad.l - 6, pad.t + plotH);
+        const numSteps = 5;
+        const stepY = (plotH - 6) / numSteps;
 
-        // Right labels
-        ctx.textAlign = "left";
-        ctx.fillText(`${Math.round(maxMs)} ms`, width - pad.r + 6, pad.t + 6);
+        const xL = pad.l - 6;
+        const xR = width - pad.r + 6;
+        for (let i = 0; i <= numSteps; i++) {
+          const y = pad.t + plotH - (i * stepY);
+          // Left labels
+          ctx.textAlign = "right";
+          const valQ = Math.round(i * (maxQ / numSteps))
+          const labelQ = `${valQ}`;
+          ctx.fillText(labelQ, xL, y);
+          // Right labels
+          ctx.textAlign = "left";
+          const valMS = Math.round(i * (maxMs / numSteps))
+          const labelMs = `${valMS} ms`;
+          ctx.fillText(labelMs, xR, y);
+        }
       }
 
       function drawBars(hours, pad, plotH, stepX, barW, maxQ) {
@@ -306,9 +315,10 @@
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
 
-        // every 6 hours
-        for (let i = hours.length - 1; i >= 0; i -= 3) {
-          const label = (i >= hours.length - 1) ? "Now" : `-${24 - i}h`;
+        // every 3 hours
+        const start = hours.length - 1
+        for (let i = start; i >= 0; i -= 3) {
+          const label = (i >= start) ? "Now" : `-${start - i}h`;
 
           const x = pad.l + i * stepX + stepX / 2;
           const y = pad.t + plotH + 6;
