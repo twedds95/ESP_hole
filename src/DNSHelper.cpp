@@ -6,30 +6,27 @@
 
 bool easy_block(const char *domain)
 {
-    String list[] = {
-        "ad.",
-        "ads.",
-        "adserver",
-        "adservers",
-        "adtrack",
-        "adtracker",
-        "adservice",
-        "adservices",
-        "advert",
-        "advertising",
-        "analytics",
-        "applytics",
-        "beacons",
-        "logging",
-        "pub.",
-        "tracker",
-        "tracking",
-        "telemetry",
-
+    static const char *patterns[] = {
+        "ad.",          
+        ".ad.",         
+        ".ads.",        
+        "adserver.",
+        "adservers.",
+        "adtrack.",
+        "adtracker.",
+        "adservice.",
+        "adservices.",
+        "analytics.",
+        "telemetry.",
+        "tracker.",
+        "tracking.",
+        "beacon.",
+        "logging."
     };
-    for (auto &text : list)
+
+    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++)
     {
-        if (strstr(domain, text.c_str()))
+        if (strstr(domain, patterns[i]) != nullptr)
         {
             return true;
         }

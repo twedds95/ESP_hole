@@ -119,6 +119,7 @@
     </div>
 
     <script>
+      let lastHours = null;
       async function loadStats() {
         try {
           const res = await fetch("/stats", { cache: "no-store" });
@@ -154,6 +155,7 @@
 
 
           drawChart(s.hours);
+          lastHours = s.hours;
           renderTop('topq', s.top.queried);
           renderTop('topb', s.top.blocked);
         } catch (e) {
@@ -166,6 +168,7 @@
 
       const canvas = document.getElementById("chart");
       const ctx = canvas.getContext("2d");
+      let canvasSize = { width: 0, height: 0 };
 
       function resizeCanvas() {
         const dpr = window.devicePixelRatio || 1;
@@ -178,14 +181,21 @@
 
         ctx.scale(dpr, dpr);
 
-        return { width: rect.width, height: rect.height };
+        canvasSize = { width: rect.width, height: rect.height };
       }
 
-      window.addEventListener("resize", resizeCanvas);
-      resizeCanvas();
+      let resizeTimer;
+      window.addEventListener("resize", () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+          resizeCanvas();
+          if (lastHours) drawChart(lastHours);
+        }, 200);
+      });
 
       function drawChart(hours) {
-        const { width, height } = resizeCanvas();
+        const width  = canvasSize.width;
+        const height = canvasSize.height;
         ctx.clearRect(0, 0, width, height);
 
         if (!hours || hours.length === 0) return;
@@ -270,9 +280,10 @@
             previousHasValue = false;
             return;
           }
+
           const x = pad.l + i * stepX + stepX / 2;
           const y = pad.t + plotH - (v / maxMs) * plotH;
-          previousHasValue ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+          !previousHasValue ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
           previousHasValue = true;
         });
 
@@ -296,7 +307,7 @@
         ctx.textBaseline = "top";
 
         // every 6 hours
-        for (let i = hours.length - 1; i >= 0; i -= 6) {
+        for (let i = hours.length - 1; i >= 0; i -= 3) {
           const label = (i >= hours.length - 1) ? "Now" : `-${24 - i}h`;
 
           const x = pad.l + i * stepX + stepX / 2;
