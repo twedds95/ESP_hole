@@ -328,6 +328,7 @@
         });
       }
 
+      resizeCanvas();
       loadStats();
       setInterval(loadStats, 30000); //30s
     </script>
