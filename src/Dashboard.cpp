@@ -206,7 +206,7 @@
         const barW = stepX * 0.7;
 
         const queries = hours.map(h => h.q || 0);
-        const avgMs = hours.map(h => (h.q - h.b > 0) ? h.t / (h.q - h.b) : 0);
+        const avgMs = hours.map(h => (h.q > 0) ? h.t / (h.q) : 0);
 
         const maxQ = Math.max(1, ...queries);
         const maxMs = Math.max(1, ...avgMs);
