@@ -10,12 +10,13 @@ static uint32_t bloomHash(const char *s, uint32_t seed)
     h *= 0x5bd1e995;
     h ^= h >> 15;
   }
+
   return h;
 }
 
 bool bloomCheck(const char *domain)
 {
-  if (!bloomFile) return true;
+  if (!bloomFile) return false;
 
   for (uint32_t i = 0; i < BLOOM_HASHES; i++)
   {

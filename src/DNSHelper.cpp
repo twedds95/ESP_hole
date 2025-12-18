@@ -38,41 +38,6 @@ bool easy_block(const char *domain)
     return false;
 }
 
-
-bool find_in_block(const char *domain)
-{
-    int len = strlen(domain);
-    char first = domain[0];
-
-    char fname[32];
-    // Try split file first
-    snprintf(fname, sizeof(fname), "/hosts_%d_%c", len, first);
-    if (!SPIFFS.exists(fname))
-    {
-        // Fallback to unsplit file
-        snprintf(fname, sizeof(fname), "/hosts_%d", len);
-    }
-
-    if (!SPIFFS.exists(fname))
-    {
-        // domain length and letter does not match any of our lists
-        return false;
-    }
-
-    File f = SPIFFS.open(fname, "r");
-    if (!f)
-    {
-        Serial.print("\nError: file open failed\n");
-        return false;
-    }
-
-    f.seek(0, SeekSet);
-    bool found = f.findUntil(domain, "@@@");
-    f.close();
-
-    return found;
-}
-
 bool find_in_rewrite(const char *domain, IPAddress &ip)
 {
     const char *fname = "/rewrite";
@@ -142,13 +107,9 @@ IPAddress handleDNSRequest(String dom)
         return ip;
     }
 
-    bool block = false;
-    if (bloomCheck(dom.c_str()))
-    {
-        block = easy_block(dom.c_str()) || find_in_block(dom.c_str());
-    }
+    bool isBlock = easy_block(dom.c_str()) || bloomCheck(dom.c_str());
     uint32_t proccessMs = millis() - oMillis;
-    if (block)
+    if (isBlock)
     {
         Serial.printf(" Blocked | Find took %lu ms\n", proccessMs);
         enqueueDnsLog(true, dom.c_str(), proccessMs);

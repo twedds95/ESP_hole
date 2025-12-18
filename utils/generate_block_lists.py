@@ -13,18 +13,18 @@ URLS = [
     "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&mimetype=plaintext&useip=0.0.0.0",
     "https://raw.githubusercontent.com/Perflyst/PiHoleBlocklist/master/android-tracking.txt",
     "https://raw.githubusercontent.com/RPiList/specials/master/Blocklisten/Win10Telemetry",
-    # "https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt",
+    "https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt",
     "https://adguardteam.github.io/HostlistsRegistry/assets/filter_2.txt",
     "https://adguardteam.github.io/HostlistsRegistry/assets/filter_4.txt",
     "https://adguardteam.github.io/HostlistsRegistry/assets/filter_7.txt",
     "https://adguardteam.github.io/HostlistsRegistry/assets/filter_11.txt",
-    # "https://adguardteam.github.io/HostlistsRegistry/assets/filter_18.txt",
+    "https://adguardteam.github.io/HostlistsRegistry/assets/filter_18.txt",
     "https://adguardteam.github.io/HostlistsRegistry/assets/filter_30.txt",
-    # "https://adguardteam.github.io/HostlistsRegistry/assets/filter_48.txt",
+    "https://adguardteam.github.io/HostlistsRegistry/assets/filter_48.txt",
     "https://adguardteam.github.io/HostlistsRegistry/assets/filter_55.txt",
 ]
 
-DATA_DIR = Path("./data")
+DATA_DIR = Path("./data_doms")
 TIMEOUT = 20
 
 # ==========================
@@ -102,24 +102,46 @@ def normalize_domain(line: str) -> str | None:
 
 def build_bloom():
     import hashlib
+    import math
     # ---- CONFIG ----
-    BITS = 2_500_000
-    HASHES = 5
-    OUT_FILE =  DATA_DIR / f"bloom.bin"
+    BITS = 12_500_000
+    HASHES = 7
+    OUT_FILE =  f"data/bloom.bin"
     HOSTS_GLOB = "hosts_*"
 
     BYTES = (BITS + 7) // 8
     bitarray = bytearray(BYTES)
+    
+    ### Ensure ESP files use same hashing
+    BLOOM_CHECK_H_FILE = Path("./include/BloomCheck.h")    
+    with open(BLOOM_CHECK_H_FILE, "r", encoding="utf-8") as f:
+        lines = f.readlines()
 
+    with open(BLOOM_CHECK_H_FILE, "w", encoding="utf-8") as f:
+        for line in lines:
+            if "#define BLOOM_BITS" in line:                
+                f.write(f"#define BLOOM_BITS {BITS}\n")
+            elif "#define BLOOM_HASHES" in line:
+                f.write(f"#define BLOOM_HASHES {HASHES}\n")
+            else:
+                f.write(line)
 
     def set_bit(i):
         bitarray[i >> 3] |= 1 << (i & 7)
 
 
+    def bloom_hash(domain: str, seed: int) -> int:
+        h = seed
+        for b in domain.encode("utf-8"):
+            h ^= b
+            h = (h * 0x5bd1e995) & 0xFFFFFFFF
+            h ^= (h >> 15)
+        return h
+
     def hashes(domain: str):
-        h = hashlib.blake2b(domain.encode("utf-8"), digest_size=16).digest()
         for i in range(HASHES):
-            yield int.from_bytes(h[i * 2 : i * 2 + 2], "little") % BITS
+            h = bloom_hash(domain, 0x9747b28c + i)
+            yield h % BITS
 
 
     count = 0
@@ -137,6 +159,15 @@ def build_bloom():
                     set_bit(h)
 
                 count += 1
+                
+    n = float(count) #num domains
+    m = float(BITS) #num bits
+    k = float(HASHES) #num hashes
+
+    p = float(1.0 - math.exp(-k * n / m))**k
+
+    print(f"False Positives %: {p}")
+    print(f"False Positives Estimate: {p*n}")
 
     with open(OUT_FILE, "wb") as f:
         f.write(bitarray)
@@ -186,52 +217,23 @@ def main():
         print("No domains extracted — exiting.")
         sys.exit(1)
 
-    SPLIT_THRESHOLD = 1_000
-
-    # ==========================
-    # First pass: bucket by length
-    # ==========================
-    by_length = defaultdict(list)
-
-    for d in domains:
-        by_length[len(d)].append(d)
-
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-
     # Cleanup old files
     for f in DATA_DIR.glob("hosts_*"):
         f.unlink()
 
     file_count = 0
-
-    # ==========================
-    # Second pass: write files
-    # ==========================
-    for length, values in by_length.items():
-
-        # Decide if we split
-        if len(values) > SPLIT_THRESHOLD:
-            # Split by first letter
-            by_letter = defaultdict(list)
-            for d in values:
-                by_letter[d[0]].append(d)
-
-            for letter, items in by_letter.items():
-                fname = DATA_DIR / f"hosts_{length}_{letter}"
-                with fname.open("w", encoding="ascii") as f:
-                    for v in items:
-                        f.write(v + "\n")
-                    f.write(",@@@\n")
-                file_count += 1
-
-        else:
-            # Single file
-            fname = DATA_DIR / f"hosts_{length}"
-            with fname.open("w", encoding="ascii") as f:
-                for v in values:
-                    f.write(v + "\n")
-                f.write(",@@@\n")
-            file_count += 1
+    buckets = defaultdict(list) 
+    for d in domains: 
+        buckets[len(d)].append(d) 
+    
+    for length, values in buckets.items(): 
+        fname = Path(DATA_DIR / f"hosts_{length}") 
+        with fname.open("w", encoding="utf-8") as f: 
+            for v in sorted(values): 
+                f.write(v + "\n") 
+            f.write(",@@@\n")        
+        file_count += 1
 
     print(f"✔ Generated {file_count} host files")
     print(f"✔ Output written to {DATA_DIR.resolve()}")

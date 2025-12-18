@@ -1,4 +1,6 @@
 .pio
 .vscode
 data/
+data_doms/
+hosts_data/
 test/
