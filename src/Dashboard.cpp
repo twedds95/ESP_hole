@@ -119,6 +119,7 @@
     </div>
 
     <script>
+      let lastHours = null;
       async function loadStats() {
         try {
           const res = await fetch("/stats", { cache: "no-store" });
@@ -145,15 +146,15 @@
 
           document.getElementById('total').textContent = s.total;
           document.getElementById('responseTime').textContent =
-            ((s.total - s.blocked) > 0 ?
-              (Math.round(s.responseTime / (s.total - s.blocked))).toFixed(2) : '0') + ' ms';
-          document.getElementById('blockTime').textContent = (Math.round(s.blockTime / s.blocked)).toFixed(2) + ' ms';
+            Math.round(s.responseTime / s.total).toFixed(2) + ' ms';
+          document.getElementById('blockTime').textContent = (s.blocked > 0 ?
+            (Math.round(s.blockTime / s.blocked)).toFixed(2) : '0') + ' ms';
           document.getElementById('blocked').textContent = s.blocked;
           document.getElementById('percent').textContent =
-            s.total ? ((s.blocked / s.total) * 100).toFixed(1) + '%' : '0%';
-
+            (s.blocked / s.total * 100).toFixed(1) + '%';
 
           drawChart(s.hours);
+          lastHours = s.hours;
           renderTop('topq', s.top.queried);
           renderTop('topb', s.top.blocked);
         } catch (e) {
@@ -166,6 +167,7 @@
 
       const canvas = document.getElementById("chart");
       const ctx = canvas.getContext("2d");
+      let canvasSize = { width: 0, height: 0 };
 
       function resizeCanvas() {
         const dpr = window.devicePixelRatio || 1;
@@ -178,14 +180,21 @@
 
         ctx.scale(dpr, dpr);
 
-        return { width: rect.width, height: rect.height };
+        canvasSize = { width: rect.width, height: rect.height };
       }
 
-      window.addEventListener("resize", resizeCanvas);
-      resizeCanvas();
+      let resizeTimer;
+      window.addEventListener("resize", () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+          resizeCanvas();
+          if (lastHours) drawChart(lastHours);
+        }, 200);
+      });
 
       function drawChart(hours) {
-        const { width, height } = resizeCanvas();
+        const width = canvasSize.width;
+        const height = canvasSize.height;
         ctx.clearRect(0, 0, width, height);
 
         if (!hours || hours.length === 0) return;
@@ -234,14 +243,24 @@
         ctx.font = "11px system-ui";
         ctx.textBaseline = "middle";
 
-        // Left labels
-        ctx.textAlign = "right";
-        ctx.fillText(maxQ, pad.l - 6, pad.t + 6);
-        ctx.fillText("0", pad.l - 6, pad.t + plotH);
+        const numSteps = 5;
+        const stepY = (plotH - 6) / numSteps;
 
-        // Right labels
-        ctx.textAlign = "left";
-        ctx.fillText(`${Math.round(maxMs)} ms`, width - pad.r + 6, pad.t + 6);
+        const xL = pad.l - 6;
+        const xR = width - pad.r + 6;
+        for (let i = 0; i <= numSteps; i++) {
+          const y = pad.t + plotH - (i * stepY);
+          // Left labels
+          ctx.textAlign = "right";
+          const valQ = Math.round(i * (maxQ / numSteps))
+          const labelQ = `${valQ}`;
+          ctx.fillText(labelQ, xL, y);
+          // Right labels
+          ctx.textAlign = "left";
+          const valMS = Math.round(i * (maxMs / numSteps))
+          const labelMs = `${valMS} ms`;
+          ctx.fillText(labelMs, xR, y);
+        }
       }
 
       function drawBars(hours, pad, plotH, stepX, barW, maxQ) {
@@ -270,9 +289,10 @@
             previousHasValue = false;
             return;
           }
+
           const x = pad.l + i * stepX + stepX / 2;
           const y = pad.t + plotH - (v / maxMs) * plotH;
-          previousHasValue ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+          !previousHasValue ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
           previousHasValue = true;
         });
 
@@ -295,9 +315,10 @@
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
 
-        // every 6 hours
-        for (let i = hours.length - 1; i >= 0; i -= 6) {
-          const label = (i >= hours.length - 1) ? "Now" : `-${24 - i}h`;
+        // every 3 hours
+        const start = hours.length - 1
+        for (let i = start; i >= 0; i -= 3) {
+          const label = (i >= start) ? "Now" : `-${start - i}h`;
 
           const x = pad.l + i * stepX + stepX / 2;
           const y = pad.t + plotH + 6;
@@ -317,6 +338,7 @@
         });
       }
 
+      resizeCanvas();
       loadStats();
       setInterval(loadStats, 30000); //30s
     </script>
