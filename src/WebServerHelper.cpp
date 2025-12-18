@@ -13,7 +13,7 @@ PersistedStats stats;
 #define totalQueries stats._totalQueries
 #define totalBlocked stats._totalBlocked
 #define totalResponseTime stats._responseTime
-#define totalBlockTime stats._blockTime
+#define totalAddedTime stats._processTime
 #define hourly stats._hourly
 #define currentHour stats._currentHour
 
@@ -70,12 +70,12 @@ void handleTimeSensitiveRotations()
   totalQueries -= hourly[currentHour].queries;
   totalBlocked -= hourly[currentHour].blocked;
   totalResponseTime -= hourly[currentHour].hourResponseTime;
-  totalBlockTime -= hourly[currentHour].hourBlockTime;
+  totalAddedTime -= hourly[currentHour].hourProcessTime;
 
   hourly[currentHour].queries = 0;
   hourly[currentHour].blocked = 0;
   hourly[currentHour].hourResponseTime = 0;
-  hourly[currentHour].hourBlockTime = 0;
+  hourly[currentHour].hourProcessTime = 0;
 }
 
 void decayTopDomains(DomainStat arr[])
@@ -120,7 +120,7 @@ String getJsonStats()
   json += "\"total\":" + String(totalQueries) + ",";
   json += "\"blocked\":" + String(totalBlocked) + ",";
   json += "\"responseTime\":" + String(totalResponseTime) + ",";
-  json += "\"blockTime\":" + String(totalBlockTime) + ",";
+  json += "\"processTime\":" + String(totalAddedTime) + ",";
 
   // Memory
   json += "\"heap\":{";
@@ -159,19 +159,19 @@ String getJsonStats()
   return json;
 }
 
-void recordQuery(bool blocked, const char *domain, uint32_t respTime)
+void recordQuery(bool blocked, const char *domain, uint32_t resolveTime, uint32_t procTime)
 {
   totalQueries++;
   hourly[currentHour].queries++;
-  totalResponseTime += respTime;
-  hourly[currentHour].hourResponseTime += respTime;
+  totalResponseTime += (resolveTime + procTime);
+  hourly[currentHour].hourResponseTime += (resolveTime + procTime);
+  totalAddedTime += procTime;
+  hourly[currentHour].hourProcessTime += procTime;
 
   if (blocked)
   {
     totalBlocked++;
     hourly[currentHour].blocked++;
-    totalBlockTime += respTime;
-    hourly[currentHour].hourBlockTime += respTime;
     updateTopBlocked(domain);
   }
   else

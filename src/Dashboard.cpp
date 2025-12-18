@@ -83,8 +83,8 @@
           <div class="stat" id="responseTime">0</div>
         </div>
         <div class="card">
-          <div>Avg Block Time</div>
-          <div class="stat" id="blockTime">0</div>
+          <div>Avg Added Process Time</div>
+          <div class="stat" id="processTime">0</div>
         </div>
         <div class="card">
           <div>Blocked</div>
@@ -147,8 +147,8 @@
           document.getElementById('total').textContent = s.total;
           document.getElementById('responseTime').textContent =
             Math.round(s.responseTime / s.total).toFixed(2) + ' ms';
-          document.getElementById('blockTime').textContent = (s.blocked > 0 ?
-            (Math.round(s.blockTime / s.blocked)).toFixed(2) : '0') + ' ms';
+          document.getElementById('processTime').textContent =
+            Math.round(s.processTime / s.total).toFixed(2) + ' ms';
           document.getElementById('blocked').textContent = s.blocked;
           document.getElementById('percent').textContent =
             (s.blocked / s.total * 100).toFixed(1) + '%';

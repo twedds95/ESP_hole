@@ -103,7 +103,7 @@ IPAddress handleDNSRequest(String dom)
         Serial.print(" | IP:");
         Serial.print(ip);
         Serial.printf("\nRewrite took %lu ms\n", rewriteMs);
-        enqueueDnsLog(false, dom.c_str(), rewriteMs);
+        enqueueDnsLog(false, dom.c_str(), rewriteMs, 0);
         return ip;
     }
 
@@ -112,7 +112,7 @@ IPAddress handleDNSRequest(String dom)
     if (isBlock)
     {
         Serial.printf(" Blocked | Find took %lu ms\n", proccessMs);
-        enqueueDnsLog(true, dom.c_str(), proccessMs);
+        enqueueDnsLog(true, dom.c_str(), proccessMs, 0);
         return IPAddress(0, 0, 0, 0);
     }
 
@@ -125,13 +125,13 @@ IPAddress handleDNSRequest(String dom)
     {
         Serial.printf("\n Block by upstream took %lu ms", resolvMs);
         Serial.printf(" | Find took %lu ms\n", proccessMs);
-        enqueueDnsLog(true, dom.c_str(), resolvMs + proccessMs);
+        enqueueDnsLog(true, dom.c_str(), resolvMs, proccessMs);
     }
     else
     {
         Serial.printf("\nResolv took %lu ms", resolvMs);
         Serial.printf(" | Find took %lu ms\n", proccessMs);
-        enqueueDnsLog(false, dom.c_str(), resolvMs + proccessMs);
+        enqueueDnsLog(false, dom.c_str(), resolvMs, proccessMs);
     }
     
     return ip;
@@ -160,19 +160,20 @@ void statsTask(void *arg)
     {
         if (xQueueReceive(dnsLogQueue, &ev, portMAX_DELAY))
         {
-            recordQuery(ev.blocked, ev.domain, ev.durationMs);
+            recordQuery(ev.blocked, ev.domain, ev.resolveMs, ev.proccessMs);
         }
     }
 }
 
-void enqueueDnsLog(bool blocked, const char *domain, uint32_t ms)
+void enqueueDnsLog(bool blocked, const char *domain, uint32_t resolvMs, uint32_t proccessMs)
 {
     if (!dnsLogQueue)
         return;
 
     DnsLogEvent ev{};
     ev.blocked = blocked;
-    ev.durationMs = ms;
+    ev.resolveMs = resolvMs;
+    ev.proccessMs = proccessMs;
     strncpy(ev.domain, domain, MAX_DOMAIN_LEN - 1);
 
     // Do NOT block DNS if queue is full

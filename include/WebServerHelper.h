@@ -8,7 +8,8 @@
 
 struct DnsLogEvent
 {
-  uint32_t durationMs;
+  uint32_t resolveMs;
+  uint32_t proccessMs;
   bool blocked;
   char domain[MAX_DOMAIN_LEN];
 };
@@ -24,7 +25,7 @@ struct HourStats
   uint32_t queries = 0;
   uint32_t blocked = 0;
   uint32_t hourResponseTime = 0;
-  uint32_t hourBlockTime = 0;
+  uint32_t hourProcessTime = 0;
 };
 
 struct PersistedStats
@@ -33,7 +34,7 @@ struct PersistedStats
   uint32_t _totalQueries;
   uint32_t _totalBlocked;
   uint64_t _responseTime;
-  uint64_t _blockTime;
+  uint64_t _processTime;
   HourStats _hourly[HOURS];  
   uint8_t _currentHour;
 };
@@ -51,7 +52,7 @@ void appendTopArray(String &json, DomainStat arr[]);
 String getJsonStats();
 void handleTimeSensitiveRotations();
 void decayTopDomains(DomainStat arr[]);
-void recordQuery(bool blocked, const char *domain, uint32_t respTime);
+void recordQuery(bool blocked, const char *domain, uint32_t resolveTime, uint32_t procTime);
 void sanitizeDomain(const char *dom, char *domain);
 void updateTop(DomainStat arr[], const char *dom, uint32_t newTotal);
 void updateTopBlocked(const char *domain);
