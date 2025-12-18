@@ -70,6 +70,7 @@ def build_bloom():
     print(f"False Positives %: {p}")
     print(f"False Positives Estimate: {p*n}")
 
+    Path("./data").mkdir(parents=True, exist_ok=True)
     with open(OUT_FILE, "wb") as f:
         f.write(bitarray)
 

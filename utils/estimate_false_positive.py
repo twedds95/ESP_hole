@@ -6,5 +6,8 @@ k = 7.0 #num hashes
 
 p = (1.0 - math.exp(-k * n / m))**k
 
+print(f"Estimated Num Domains: {n}")
+print(f"BITS: {m}")
+print(f"HASH: {k}")
 print(f"False Positives %: {p * 100}")
 print(f"False Positives Estimate: {p*n}")

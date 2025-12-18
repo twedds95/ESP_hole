@@ -1,8 +1,8 @@
 # Ad Blocker for ESP
 
-ESP_hole is a low power, low feature, ad blocking DNS server for the ESP. 
+ESP_hole is a low power, low feature, bloom filter based ad blocking DNS server for the ESP. 
 
-I was heavily inspired by [Rubfi's esphole project](https://github.com/rubfi/esphole) also made for the ESP.
+I was inspired by [Rubfi's esphole project](https://github.com/rubfi/esphole) also made for the ESP.
 
 Like Rubfi's project, this uses a modified version of the DNS Server library included with the [Esp8266 core for Arduino](https://github.com/esp8266/Arduino/tree/master/libraries/DNSServer/src)
 
@@ -13,21 +13,41 @@ HARDWARE INFO FOR THIS PROJECT: ESP32S2 240MHz, 320KB RAM, 4MB Flash
 ## How to install
 
 ### Preprocess the hosts file
-Like Rubfi's project, it is necessary to preprocess the domain block lists. I modified the script to use python, and also added the possibility to run it with multiple source filter lists. It is important to note the ESP's very limited space, so you should monitor the list sizes used and produced. I had to comment some of the filter lists because they would produce too much data for the ESP to handle. 
+*I have included my data folder if you do not wish to preprocess your own*
+
+Like Rubfi's project, it is necessary to preprocess the domain block lists. I modified the script to use python, and also added the possibility to run it with multiple source filter lists. It is important to note the ESP's very limited space, so you should monitor the list sizes used and produced. I pivoted from the text comparison approach as I wanted to allow for a larger list of filtered domains while also keeping processing time low. This led me to implement a [Bloom Filter](https://en.wikipedia.org/wiki/Bloom_filter) probabilistic data structure.
 
     $ python utils/generate_block_lists.py 
 
-This downloads the hosts file and saves it in different files in the *data* directory.
-As reference, for the ESP32 S2 mini, I was aiming to keep the total number of Unique domains below 100,000. Like Rubfi's project, the host files are preprocessed and stored in smaller files based on the lenght of the domain. Due to using more, and larger lists, the script will also further break down the data into smaller files based on length of the domain as well as the first letter if the data for a particular length becomes too large. The ESP code handles this flexible file lookup logic. 
+Script Output:
+
+    Processed lines : 591,475
+    Matched entries : 573,310
+    Unique domains  : 422,005
+
+    False Positives %: 1.8289727911195435e-05
+    False Positives Estimate: 7.717826225054605
+    Bloom built: 421976 domains
+    Size: 1525.9 KB
+
+This downloads the hosts file and saves it in different files in the **data_doms** directory. The script then calls **utils/generate_bloom.py** and generates **bloom.bin** in the **data** directory. Depending on the number of domains you are aiming to block, you should modify the *BITS* and *HASHES* values in the **utils/generate_bloom.py** file to minimize the number of false positives your DNS server will block, while also trying to minimize processing time. The way a bloom filter works is it allows for false positives but no false negatives. Therefore, all domains that are included in your lists will always be blocked, but there is also a chance that some not included domains can also get blocked. 
+
+You can run a quick estimate before processing your lists to help you tweak the *BITS* and *HASHES* and make sure the percentage of false positives is acceptable for you by running **utils/estimate_false_positive.py**.
+
+    $ python utils/estimate_false_positive.py 
 
 Script Output:
 
-    Processed lines : 139,205
-    Matched entries : 121,068
-    Unique domains  : 93,434
+    Estimated Num Domains: 400000.0
+    BITS: 12500000.0
+    HASH: 7.0
+    False Positives %: 0.0013109989808194958
+    False Positives Estimate: 5.243995923277983
 
 
-You can also add a **rewrite** file in the data folder if you wish to add some custom local domains, similar to the Adguard Home DNS rewrites. Each line should contain the domain name (or substring if needed), with a comma and the ip it should point to. The file should also contain a _,@@@_ like the generated block list files. The example below shows that I want the home.page.com domain to point to my local homepage docker instance on 192.168.0.150 (on port 80, so does not need to be specified).
+You can also make modifications to the generated **hosts_d** files in the **data_doms** directory and run **utils/generate_bloom.py** directly if there are domains that you really want blocked that were not included by the filters. 
+
+A **rewrite** file can also be added in the **data** folder if you wish to add some custom local domains, similar to the Adguard Home DNS rewrites. Each line should contain the domain name (or substring if needed), with a comma and the ip it should point to. The file should also contain a _,@@@_ like the generated block list files. The example below shows that I want the home.page.com domain to point to my local homepage docker instance on 192.168.0.150 (on port 80, so does not need to be specified).
 
     home.page.com,192.168.0.150
     ,@@@
@@ -35,7 +55,7 @@ You can also add a **rewrite** file in the data folder if you wish to add some c
 
 ### Upload the SPIFFS
 
-Trivial with the PIO extension. But follow [this guide](https://randomnerdtutorials.com/esp32-vs-code-platformio-spiffs/) if you have issues. Make sure to research your board to determine its specific capacity. 
+Upload the **bloom.bin** and (optional) **rewrite** files to the ESP. This is trivial with the PIO extension. But follow [this guide](https://randomnerdtutorials.com/esp32-vs-code-platformio-spiffs/) if you have issues. Make sure to research your board to determine its specific capacity. 
 
 ### Upload the sketch
 
