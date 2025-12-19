@@ -107,6 +107,7 @@ void appendTopArray(String &json, DomainStat arr[])
     first = false;
     json += "{";
     json += "\"d\":\"" + String(arr[i].domain) + "\",";
+    json += "\"u\":\"" + String(arr[i].isReachedUpstream) + "\",";
     json += "\"c\":" + String(arr[i].count);
     json += "}";
   }
@@ -168,15 +169,16 @@ void recordQuery(bool blocked, const char *domain, uint32_t resolveTime, uint32_
   totalAddedTime += procTime;
   hourly[currentHour].hourProcessTime += procTime;
 
+  // procTime of 0 means query was not sent to upstream
   if (blocked)
   {
     totalBlocked++;
     hourly[currentHour].blocked++;
-    updateTopBlocked(domain);
+    updateTopBlocked(domain, procTime > 0);
   }
   else
   {
-    updateTopQueried(domain);
+    updateTopQueried(domain, procTime > 0);
   }
 }
 
@@ -197,17 +199,17 @@ void sanitizeDomain(const char *in, char *domain)
   domain[used] = '\0';
 }
 
-void updateTopBlocked(const char *domain)
+void updateTopBlocked(const char *domain, bool isReachedUpstream)
 {
-  updateTop(topBlocked, domain, totalBlocked);
+  updateTop(topBlocked, domain, isReachedUpstream);
 }
 
-void updateTopQueried(const char *domain)
+void updateTopQueried(const char *domain, bool isReachedUpstream)
 {
-  updateTop(topQueried, domain, totalQueries - totalBlocked);
+  updateTop(topQueried, domain, isReachedUpstream);
 }
 
-void updateTop(DomainStat arr[], const char *dom, uint32_t newTotal)
+void updateTop(DomainStat arr[], const char *dom, bool isReachedUpstream)
 {
   char domain[MAX_DOMAIN_LEN];
   sanitizeDomain(dom, domain);
@@ -217,6 +219,7 @@ void updateTop(DomainStat arr[], const char *dom, uint32_t newTotal)
     if (arr[i].count && strcmp(arr[i].domain, domain) == 0)
     {
       arr[i].count++;
+      arr[i].isReachedUpstream = isReachedUpstream;
       return;
     }
   }
@@ -228,6 +231,7 @@ void updateTop(DomainStat arr[], const char *dom, uint32_t newTotal)
     {
       strncpy(arr[i].domain, domain, MAX_DOMAIN_LEN);
       arr[i].count = 1;
+      arr[i].isReachedUpstream = isReachedUpstream;
       return;
     }
   }
@@ -242,4 +246,5 @@ void updateTop(DomainStat arr[], const char *dom, uint32_t newTotal)
 
   strncpy(arr[minIdx].domain, domain, MAX_DOMAIN_LEN);
   arr[minIdx].count = 1;
+  arr[minIdx].isReachedUpstream = isReachedUpstream;
 }

@@ -45,6 +45,57 @@
         height: 200px;
       }
 
+      .top-list li {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .top-list .domain {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .top-list .count {
+        flex-shrink: 0;
+        color: #aaa;
+      }
+
+      .action-btn {
+        flex-shrink: 0;
+        border: none;
+        border-radius: 6px;
+        padding: 4px 6px;
+        font-size: 13px;
+        cursor: pointer;
+        opacity: 0.85;
+      }
+
+      .action-btn:hover {
+        opacity: 1;
+      }
+
+      .action-btn.allow {
+        background: #2ecc71;
+        color: #000;
+      }
+
+      .action-btn.block {
+        background: #e74c3c;
+        color: #000;
+      }
+
+      /* Mobile tap safety */
+      @media (max-width: 600px) {
+        .action-btn {
+          padding: 6px 8px;
+          font-size: 14px;
+        }
+      }
+
       #emptyState {
         background: #1e1e1e;
         border-radius: 8px;
@@ -103,12 +154,12 @@
 
       <div class="card">
         <h3>Top Queried Domains</h3>
-        <ul id="topq"></ul>
+        <ul id="topq" class="top-list queried"></ul>
       </div>
 
       <div class="card">
         <h3>Top Blocked Domains</h3>
-        <ul id="topb"></ul>
+        <ul id="topb" class="top-list blocked"></ul>
       </div>
     </div>
 
@@ -155,8 +206,8 @@
 
           drawChart(s.hours);
           lastHours = s.hours;
-          renderTop('topq', s.top.queried);
-          renderTop('topb', s.top.blocked);
+          renderTop('topq', s.top.queried, "allow");
+          renderTop('topb', s.top.blocked, "block");
         } catch (e) {
           console.warn("Stats fetch failed:", e);
           document.getElementById("offlineState").style.display = "block";
@@ -327,13 +378,40 @@
         }
       }
 
-      function renderTop(id, list) {
+      function renderTop(id, list, mode) {
         const ul = document.getElementById(id);
         ul.innerHTML = '';
         list.sort((a, b) => b.c - a.c);
+
         list.forEach(e => {
           const li = document.createElement('li');
-          li.textContent = `${e.d} (${e.c})`;
+          const dom = document.createElement('span');
+          dom.className = 'domain';
+          dom.textContent = e.d;
+          dom.title = e.d;
+
+          const cnt = document.createElement('span');
+          cnt.className = 'count';
+          cnt.textContent = `(${e.c})`;
+
+          const btn = document.createElement('button');
+          btn.className = 'action-btn ' + (mode === 'block' ? 'allow' : 'block');
+          btn.textContent = mode === 'block' ? '✓' : '⛔';
+          btn.title = mode === 'block' ? 'Whitelist' : 'Block';
+
+          btn.onclick = () => {
+            console.log(
+              mode === 'block'
+                ? 'Whitelist domain:' + e.d
+                : 'Block domain:' + e.d
+            );
+          };
+
+          if ((!e.u && mode === "block") || (e.u && mode !== "block")) {
+            li.append(dom, cnt, btn);
+          } else {
+            li.append(dom, cnt);
+          }
           ul.appendChild(li);
         });
       }

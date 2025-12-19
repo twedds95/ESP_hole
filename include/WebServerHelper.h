@@ -43,6 +43,7 @@ struct DomainStat
 {
   char domain[MAX_DOMAIN_LEN];
   uint32_t count;
+  bool isReachedUpstream;
 };
 
 void loadPersistedStats();
@@ -54,6 +55,6 @@ void handleTimeSensitiveRotations();
 void decayTopDomains(DomainStat arr[]);
 void recordQuery(bool blocked, const char *domain, uint32_t resolveTime, uint32_t procTime);
 void sanitizeDomain(const char *dom, char *domain);
-void updateTop(DomainStat arr[], const char *dom, uint32_t newTotal);
-void updateTopBlocked(const char *domain);
-void updateTopQueried(const char *domain);
+void updateTop(DomainStat arr[], const char *dom, bool isReachedUpstream);
+void updateTopBlocked(const char *domain, bool isReachedUpstream);
+void updateTopQueried(const char *domain, bool isReachedUpstream);
