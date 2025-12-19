@@ -1,5 +1,7 @@
 #include <WebServerHelper.h>
 
+AsyncWebServer server(80);
+
 // Data
 DomainStat topBlocked[TOP_N_TRACKED];
 DomainStat topQueried[TOP_N_TRACKED];
@@ -45,6 +47,111 @@ void loadPersistedStats()
   }
 
   prefs.end();
+}
+
+void handleRoot()
+{
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+            { request->send_P(200, "text/html", DASHBOARD_HTML); });
+}
+
+void handleStats()
+{
+  server.on("/stats", HTTP_GET, [](AsyncWebServerRequest *request)
+            { request->send(200, "application/json", getJsonStats()); });
+}
+
+void handleWhitelistAdds()
+{
+  server.on("/whitelist/add", HTTP_POST, [](AsyncWebServerRequest *req)
+            {
+      if (!req->hasParam("domain", true)) {
+        req->send(400, "text/plain", "Missing domain");
+        return;
+      }
+
+      String d = req->getParam("domain", true)->value();
+      d.toLowerCase();
+      d.trim();
+
+                  if (addWhiteListEntry(d))
+      {        
+        req->send(200, "text/plain", "OK"); 
+      }
+      else {
+        req->send(500, "text/plain", "Error updating rewrite list");
+      } });
+}
+
+void handleBlocklistAdds()
+{
+  server.on("/blocklist/add", HTTP_POST, [](AsyncWebServerRequest *req)
+            {
+      if (!req->hasParam("domain", true)) {
+        req->send(400, "text/plain", "Missing domain");
+        return;
+      }
+      
+      String d = req->getParam("domain", true)->value();
+      d.toLowerCase();
+      d.trim();
+
+      if (addBlockListEntry(d))
+      {        
+        req->send(200, "text/plain", "OK"); 
+      }
+      else {
+        req->send(500, "text/plain", "Error updating block list");
+      } });
+}
+
+void handleRewriteAdds()
+{
+  server.on("/rewrite/add", HTTP_POST, [](AsyncWebServerRequest *req)
+            {
+      if (!req->hasParam("domain", true)) {
+        req->send(400, "text/plain", "Missing domain");
+        return;
+      } 
+
+      if (!req->hasParam("ip", true)) {
+        req->send(400, "text/plain", "Missing rewrite IP");
+        return;
+      }
+      
+      String d = req->getParam("domain", true)->value();
+      d.toLowerCase();
+      d.trim();
+      String ip = req->getParam("ip", true)->value();
+
+      
+            if (addRewriteRule(d.c_str(), ip.c_str()))
+      {        
+        req->send(200, "text/plain", "OK"); 
+      }
+      else {
+        req->send(500, "text/plain", "Error updating rewrite list");
+      } });
+}
+
+void handleListAdds()
+{
+  handleWhitelistAdds();
+  handleBlocklistAdds();
+  handleRewriteAdds();
+}
+
+void setupServerHelper()
+{
+  loadPersistedStats();
+
+  handleRoot();
+  handleStats();
+  handleListAdds();
+
+  server.begin();
+  Serial.println("ESP_hole Dashboard started on:");
+  Serial.println(WiFi.localIP());
 }
 
 void handleTimeSensitiveRotations()
@@ -107,7 +214,7 @@ void appendTopArray(String &json, DomainStat arr[])
     first = false;
     json += "{";
     json += "\"d\":\"" + String(arr[i].domain) + "\",";
-    json += "\"u\":\"" + String(arr[i].isReachedUpstream) + "\",";
+    json += "\"u\":" + String(arr[i].isReachedUpstream) + ",";
     json += "\"c\":" + String(arr[i].count);
     json += "}";
   }

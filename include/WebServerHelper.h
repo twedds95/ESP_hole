@@ -1,4 +1,11 @@
+#ifndef WEBSERVERHELPER_H
+#define WEBSERVERHELPER_H
+
 #include <Arduino.h>
+#include <DNSOverrideLists.h>
+#include <ESPAsyncWebServer.h>
+
+#include <Dashboard.cpp>
 
 #define HOURS 24
 // track more domains but only show top 10 in Dashboard
@@ -46,8 +53,14 @@ struct DomainStat
   bool isReachedUpstream;
 };
 
-void loadPersistedStats();
+void handleRoot();
+void handleStats();
+void handleListAdds();
+
 void savePersistedStats();
+void loadPersistedStats();
+void setupServerHelper();
+
 
 void appendTopArray(String &json, DomainStat arr[]);
 String getJsonStats();
@@ -58,3 +71,5 @@ void sanitizeDomain(const char *dom, char *domain);
 void updateTop(DomainStat arr[], const char *dom, bool isReachedUpstream);
 void updateTopBlocked(const char *domain, bool isReachedUpstream);
 void updateTopQueried(const char *domain, bool isReachedUpstream);
+
+#endif //WEBSERVERHELPER_H

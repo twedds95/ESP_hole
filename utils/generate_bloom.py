@@ -87,9 +87,9 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description=f"Generates Bloom filter bin file using {DATA_DIR}")
 
-    parser.add_argument("-m", "--bits", type=float, default=DEFAULT_BITS,
+    parser.add_argument("-m", "--bits", type=int, default=DEFAULT_BITS,
                         help=f"Number of bits (default: {DEFAULT_BITS})")
-    parser.add_argument("-k", "--hashes", type=float, default=DEFAULT_HASHES,
+    parser.add_argument("-k", "--hashes", type=int, default=DEFAULT_HASHES,
                         help=f"Number of hash functions (default: {DEFAULT_HASHES})")
     
     args = parser.parse_args()

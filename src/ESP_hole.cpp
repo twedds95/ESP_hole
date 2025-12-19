@@ -3,13 +3,12 @@
 // built-ins
 #include <FS.h>
 #include <SPIFFS.h>
-#include <WebServer.h>
 #include <WiFiManager.h>
 
 // customs
 #include <BloomCheck.h>
-#include <Dashboard.cpp>
 #include <DNSHelper.h>
+#include <DNSOverrideLists.h>
 #include <DNSServer.h>
 #include <WebServerHelper.h>
 
@@ -22,21 +21,8 @@ wifi_power_t WiFiTxPower = WIFI_POWER_15dBm;
 
 const byte DNS_PORT = 53;
 DNSServer dnsServer;
-WebServer server(80);
 
-void handleRoot();
-void handleStats();
 void setupWifi();
-
-void handleRoot()
-{
-    server.send_P(200, "text/html", DASHBOARD_HTML);
-}
-
-void handleStats()
-{
-    server.send(200, "application/json", getJsonStats());
-}
 
 void setup()
 {
@@ -62,13 +48,8 @@ void setup()
     Serial.println(WiFi.dnsIP(0));
     Serial.println(WiFi.dnsIP(1));
 
-    loadPersistedStats();
-
-    server.on("/", handleRoot);
-    server.on("/stats", handleStats);
-    server.begin();
-    Serial.println("ESP_hole Dashboard started on:");
-    Serial.println(WiFi.localIP());
+    setupDNSLists();
+    setupServerHelper();
 }
 
 void setupWifi()
@@ -109,7 +90,6 @@ void setupWifi()
 
 void loop()
 {
-    server.handleClient();
     handleTimeSensitiveRotations();
     int dnsOK = dnsServer.processNextRequest();
     if (dnsOK == 0)

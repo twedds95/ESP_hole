@@ -396,18 +396,21 @@
 
           const btn = document.createElement('button');
           btn.className = 'action-btn ' + (mode === 'block' ? 'allow' : 'block');
-          btn.textContent = mode === 'block' ? '✓' : '⛔';
+          btn.textContent = mode === 'block' ? '✅' : '⛔';
           btn.title = mode === 'block' ? 'Whitelist' : 'Block';
 
-          btn.onclick = () => {
-            console.log(
-              mode === 'block'
-                ? 'Whitelist domain:' + e.d
-                : 'Block domain:' + e.d
+          btn.onclick = async () => {
+            await fetch(
+              mode === 'block' ? '/whitelist/add' : '/blocklist/add',
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'domain=' + encodeURIComponent(e.d)
+              }
             );
           };
 
-          if ((!e.u && mode === "block") || (e.u && mode !== "block")) {
+          if ((!e.u && mode === "block") || (e.u && mode != "block")) {
             li.append(dom, cnt, btn);
           } else {
             li.append(dom, cnt);

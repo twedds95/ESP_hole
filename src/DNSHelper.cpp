@@ -1,20 +1,10 @@
 #include <DNSHelper.h>
 
 #include <BloomCheck.h>
-#include <SPIFFS.h>
+#include <DNSOverrideLists.h>
 #include <WebServerHelper.h>
-#include <vector>
 #include <WiFi.h>
 
-struct RewriteRule
-{
-    String domain;
-    IPAddress ip;
-};
-
-std::vector<RewriteRule> rewriteRules;
-std::vector<String> whiteList;
-std::vector<String> blockList;
 
 QueueHandle_t dnsLogQueue;
 
@@ -50,7 +40,7 @@ bool isEasyBlock(const char *domain)
 
 bool isBlockedOverride(const char *domain)
 {
-    for (auto &b : blockList)
+    for (auto &b : getBlockList())
     {
         if (b.equalsIgnoreCase(domain))
             return true;
@@ -60,7 +50,7 @@ bool isBlockedOverride(const char *domain)
 
 bool isWhiteListOverride(const char *domain)
 {
-    for (auto &b : whiteList)
+    for (auto &b : getWhiteList())
     {
         if (b.equalsIgnoreCase(domain))
             return true;
@@ -70,7 +60,7 @@ bool isWhiteListOverride(const char *domain)
 
 bool isRewrite(const char *domain, IPAddress &ip)
 {
-    for (auto &r : rewriteRules)
+    for (auto r : getRewriteRules())
     {
         if (strstr(domain, r.domain.c_str()) != nullptr)
         {
@@ -151,81 +141,7 @@ IPAddress handleDNSRequest(String dom)
 
 void setupDNSHelper()
 {
-    setupRewrite();
-    setupWhiteList();
-    setupBlockList();
     setupLogQueue();
-}
-
-void setupRewrite()
-{
-    rewriteRules.clear();
-
-    File f = SPIFFS.open("/rewrite", "r");
-    if (!f)
-        return;
-
-    while (f.available())
-    {
-        String line = f.readStringUntil('\n');
-        line.trim();
-        if (!line.length())
-            continue;
-
-        int comma = line.indexOf(',');
-        if (comma < 0)
-            continue;
-
-        String dom = line.substring(0, comma);
-        String ipStr = line.substring(comma + 1);
-
-        dom.toLowerCase();
-        ipStr.trim();
-
-        IPAddress ip;
-        if (!ip.fromString(ipStr))
-            continue;
-
-        rewriteRules.push_back({dom, ip});
-    }
-
-    f.close();
-}
-
-void setupWhiteList()
-{
-    whiteList.clear();
-
-    File f = SPIFFS.open("/whitelist", "r");
-    if (!f)
-        return;
-
-    while (f.available())
-    {
-        String line = f.readStringUntil('\n');
-        line.trim();
-        if (line.length() > 0)
-            whiteList.push_back(line);
-    }
-    f.close();
-}
-
-void setupBlockList()
-{
-    blockList.clear();
-
-    File f = SPIFFS.open("/blockList", "r");
-    if (!f)
-        return;
-
-    while (f.available())
-    {
-        String line = f.readStringUntil('\n');
-        line.trim();
-        if (line.length() > 0)
-            blockList.push_back(line);
-    }
-    f.close();
 }
 
 void setupLogQueue()
