@@ -408,6 +408,7 @@
                 body: 'domain=' + encodeURIComponent(e.d)
               }
             );
+            li.remove();
           };
 
           if ((!e.u && mode === "block") || (e.u && mode != "block")) {

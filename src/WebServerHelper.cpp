@@ -74,9 +74,10 @@ void handleWhitelistAdds()
       d.toLowerCase();
       d.trim();
 
-                  if (addWhiteListEntry(d))
+      if (addWhiteListEntry(d))
       {        
-        req->send(200, "text/plain", "OK"); 
+        req->send(200, "text/plain", "OK");
+        removeFromTopList(topBlocked, d.c_str());
       }
       else {
         req->send(500, "text/plain", "Error updating rewrite list");
@@ -98,7 +99,8 @@ void handleBlocklistAdds()
 
       if (addBlockListEntry(d))
       {        
-        req->send(200, "text/plain", "OK"); 
+        req->send(200, "text/plain", "OK");
+        removeFromTopList(topQueried, d.c_str());
       }
       else {
         req->send(500, "text/plain", "Error updating block list");
@@ -125,7 +127,7 @@ void handleRewriteAdds()
       String ip = req->getParam("ip", true)->value();
 
       
-            if (addRewriteRule(d.c_str(), ip.c_str()))
+      if (addRewriteRule(d.c_str(), ip.c_str()))
       {        
         req->send(200, "text/plain", "OK"); 
       }
@@ -354,4 +356,21 @@ void updateTop(DomainStat arr[], const char *dom, bool isReachedUpstream)
   strncpy(arr[minIdx].domain, domain, MAX_DOMAIN_LEN);
   arr[minIdx].count = 1;
   arr[minIdx].isReachedUpstream = isReachedUpstream;
+}
+
+void removeFromTopList(DomainStat arr[], const char *dom)
+{
+  char domain[MAX_DOMAIN_LEN];
+  sanitizeDomain(dom, domain);
+  // Check if exists
+  for (int i = 0; i < TOP_N_TRACKED; i++)
+  {
+    if (arr[i].count && strcmp(arr[i].domain, domain) == 0)
+    {
+      strncpy(arr[i].domain, "", MAX_DOMAIN_LEN);
+      arr[i].count = 0;
+      arr[i].isReachedUpstream = true;
+      return;
+    }
+  }
 }
