@@ -17,7 +17,7 @@ HARDWARE INFO FOR THIS PROJECT: ESP32S2 240MHz, 320KB RAM, 4MB Flash
 
 Like Rubfi's project, it is necessary to preprocess the domain block lists. I modified the script to use python, and also added the possibility to run it with multiple source filter lists. It is important to note the ESP's very limited space, so you should monitor the list sizes used and produced. I pivoted from the text comparison approach as I wanted to allow for a larger list of filtered domains while also keeping processing time low. This led me to implement a [Bloom Filter](https://en.wikipedia.org/wiki/Bloom_filter) probabilistic data structure.
 
-    $ python utils/generate_block_lists.py 
+    $ python utils/generate_block_lists.py --bits 12500000 -k 6
 
 Script Output:
 
@@ -25,24 +25,24 @@ Script Output:
     Matched entries : 573,310
     Unique domains  : 422,005
 
-    False Positives %: 1.8289727911195435e-05
-    False Positives Estimate: 7.717826225054605
+    False Positives %: 0.0038
+    On a random set of 422,005 domains, ~16.0 domains would get blocked that should not be.
     Bloom built: 421976 domains
     Size: 1525.9 KB
 
-This downloads the hosts file and saves it in different files in the **data_doms** directory. The script then calls **utils/generate_bloom.py** and generates **bloom.bin** in the **data** directory. Depending on the number of domains you are aiming to block, you should modify the *BITS* and *HASHES* values in the **utils/generate_bloom.py** file to minimize the number of false positives your DNS server will block, while also trying to minimize processing time. The way a bloom filter works is it allows for false positives but no false negatives. Therefore, all domains that are included in your lists will always be blocked, but there is also a chance that some not included domains can also get blocked. 
+This downloads the hosts file and saves it in different files in the **data_doms** directory. The script then calls **utils/generate_bloom.py** and generates **bloom.bin** in the **data** directory. Depending on the number of domains you are aiming to block, you should modify the *BITS* and *HASHES* arguments in the **utils/generate_bloom.py** file to minimize the number of false positives your DNS server will block, while also trying to minimize processing time (the script will also update the CONSTANT values in the ESP code to match teh hashing functions). The way a bloom filter works is it allows for false positives but no false negatives. Therefore, all domains that are included in your lists will always be blocked, but there is also a chance that some not included domains can also get blocked. 
 
 You can run a quick estimate before processing your lists to help you tweak the *BITS* and *HASHES* and make sure the percentage of false positives is acceptable for you by running **utils/estimate_false_positive.py**.
 
-    $ python utils/estimate_false_positive.py 
+    $ python utils/estimate_false_positive.py -m 10000000 --hashes 6 -n 300000
 
 Script Output:
 
-    Estimated Num Domains: 400000.0
-    BITS: 12500000.0
-    HASH: 7.0
-    False Positives %: 0.0013109989808194958
-    False Positives Estimate: 5.243995923277983
+    Estimated Num Domains: 300,000
+    BITS: 10,000,000
+    HASH: 6
+    False Positives %: 0.0020
+    On a random set of 300,000 domains, ~6.0 domains would get blocked that should not be.
 
 
 You can also make modifications to the generated **hosts_d** files in the **data_doms** directory and run **utils/generate_bloom.py** directly if there are domains that you really want blocked that were not included by the filters. 
@@ -114,5 +114,5 @@ In the serial monitor the debug information is shown:
 
 ## TODOS:
 
-1. Add a whitelist option to the dashboard
-    - needed for if a false positive affects an important domain
+1. Add pages to manually update whitelist and blocklist options from the dashboard
+    - only possible for domains that appear in the top 10s currently
