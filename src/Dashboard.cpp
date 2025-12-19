@@ -411,7 +411,7 @@
           };
 
           if ((!e.u && mode === "block") || (e.u && mode != "block")) {
-            li.append(dom, cnt, btn);
+            li.append(dom, btn, cnt);
           } else {
             li.append(dom, cnt);
           }
