@@ -9,7 +9,7 @@
 struct DnsLogEvent
 {
   uint32_t resolveMs;
-  uint32_t proccessMs;
+  uint32_t processMs;
   bool blocked;
   char domain[MAX_DOMAIN_LEN];
 };

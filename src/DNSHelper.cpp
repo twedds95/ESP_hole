@@ -3,11 +3,22 @@
 #include <BloomCheck.h>
 #include <SPIFFS.h>
 #include <WebServerHelper.h>
+#include <vector>
 #include <WiFi.h>
+
+struct RewriteRule
+{
+    String domain;
+    IPAddress ip;
+};
+
+std::vector<RewriteRule> rewriteRules;
+std::vector<String> whiteList;
+std::vector<String> blockList;
 
 QueueHandle_t dnsLogQueue;
 
-bool easy_block(const char *domain)
+bool isEasyBlock(const char *domain)
 {
     static const char *patterns[] = {
         "ad.",
@@ -24,8 +35,7 @@ bool easy_block(const char *domain)
         "tracker.",
         "tracking.",
         "beacon.",
-        "logging."
-    };
+        "logging."};
 
     for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++)
     {
@@ -38,46 +48,61 @@ bool easy_block(const char *domain)
     return false;
 }
 
-bool find_in_rewrite(const char *domain, IPAddress &ip)
+bool isBlockedOverride(const char *domain)
 {
-    const char *fname = "/rewrite";
-    if (!SPIFFS.exists(fname))
+    for (auto &b : blockList)
     {
-        Serial.printf("\nWarning: rewrite file not found\n");
-        return false;
+        if (b.equalsIgnoreCase(domain))
+            return true;
     }
-    File f = SPIFFS.open(fname, "r");
-    if (!f)
+    return false;
+}
+
+bool isWhiteListOverride(const char *domain)
+{
+    for (auto &b : whiteList)
     {
-        Serial.printf("\nError: file open failed\n");
-        return false;
+        if (b.equalsIgnoreCase(domain))
+            return true;
     }
+    return false;
+}
 
-    char line[64];
-    while (f.available())
+bool isRewrite(const char *domain, IPAddress &ip)
+{
+    for (auto &r : rewriteRules)
     {
-        size_t n = f.readBytesUntil('\n', line, sizeof(line) - 1);
-        line[n] = 0;
-
-        if (line == ",@@@")
-            break;
-
-        char *rewriteDomain = strtok(line, ",");
-        char *ipAddress = strtok(NULL, ",");
-
-        if (strstr(domain, rewriteDomain) != NULL)
+        if (strstr(domain, r.domain.c_str()) != nullptr)
         {
-            int one, two, three, four;
-            if (sscanf(ipAddress, "%d.%d.%d.%d", &one, &two, &three, &four) == 4)
-            {
-                ip = IPAddress(one, two, three, four);
-                return true;
-            }
+            ip = r.ip;
+            return true;
         }
     }
-    f.close();
 
     return false;
+}
+
+IPAddress sendUpstream(const char *dom, IPAddress &ip, uint32_t processMs)
+{
+    uint32_t oMillis = millis();
+    WiFi.hostByName(dom, ip);
+    uint32_t resolvMs = millis() - oMillis;
+    Serial.print(" | IP:");
+    Serial.print(ip);
+    if (ip == IPAddress(0, 0, 0, 0))
+    {
+        Serial.printf("\n Block by upstream took %lu ms", resolvMs);
+        Serial.printf(" | Find took %lu ms\n", processMs);
+        enqueueDnsLog(true, dom, resolvMs, processMs);
+    }
+    else
+    {
+        Serial.printf("\nResolv took %lu ms", resolvMs);
+        Serial.printf(" | Find took %lu ms\n", processMs);
+        enqueueDnsLog(false, dom, resolvMs, processMs);
+    }
+
+    return ip;
 }
 
 IPAddress handleDNSRequest(String dom)
@@ -97,7 +122,7 @@ IPAddress handleDNSRequest(String dom)
     Serial.print(dom.c_str());
     IPAddress ip;
     uint32_t oMillis = millis();
-    if (find_in_rewrite(dom.c_str(), ip))
+    if (isRewrite(dom.c_str(), ip))
     {
         uint32_t rewriteMs = millis() - oMillis;
         Serial.print(" | IP:");
@@ -107,34 +132,100 @@ IPAddress handleDNSRequest(String dom)
         return ip;
     }
 
-    bool isBlock = easy_block(dom.c_str()) || bloomCheck(dom.c_str());
-    uint32_t proccessMs = millis() - oMillis;
+    if (isWhiteListOverride(dom.c_str()))
+    {
+        return sendUpstream(dom.c_str(), ip, millis() - oMillis);
+    }
+
+    bool isBlock = isBlockedOverride(dom.c_str()) || isEasyBlock(dom.c_str()) || bloomCheck(dom.c_str());
+    uint32_t processMs = millis() - oMillis;
     if (isBlock)
     {
-        Serial.printf(" Blocked | Find took %lu ms\n", proccessMs);
-        enqueueDnsLog(true, dom.c_str(), proccessMs, 0);
+        Serial.printf(" Blocked | Find took %lu ms\n", processMs);
+        enqueueDnsLog(true, dom.c_str(), processMs, 0);
         return IPAddress(0, 0, 0, 0);
     }
 
-    oMillis = millis();
-    WiFi.hostByName(dom.c_str(), ip);
-    uint32_t resolvMs = millis() - oMillis;
-    Serial.print(" | IP:");
-    Serial.print(ip);
-    if (ip == IPAddress(0, 0, 0, 0))
+    return sendUpstream(dom.c_str(), ip, millis() - oMillis);
+}
+
+void setupDNSHelper()
+{
+    setupRewrite();
+    setupWhiteList();
+    setupBlockList();
+    setupLogQueue();
+}
+
+void setupRewrite()
+{
+    rewriteRules.clear();
+
+    File f = SPIFFS.open("/rewrite", "r");
+    if (!f)
+        return;
+
+    while (f.available())
     {
-        Serial.printf("\n Block by upstream took %lu ms", resolvMs);
-        Serial.printf(" | Find took %lu ms\n", proccessMs);
-        enqueueDnsLog(true, dom.c_str(), resolvMs, proccessMs);
+        String line = f.readStringUntil('\n');
+        line.trim();
+        if (!line.length())
+            continue;
+
+        int comma = line.indexOf(',');
+        if (comma < 0)
+            continue;
+
+        String dom = line.substring(0, comma);
+        String ipStr = line.substring(comma + 1);
+
+        dom.toLowerCase();
+        ipStr.trim();
+
+        IPAddress ip;
+        if (!ip.fromString(ipStr))
+            continue;
+
+        rewriteRules.push_back({dom, ip});
     }
-    else
+
+    f.close();
+}
+
+void setupWhiteList()
+{
+    whiteList.clear();
+
+    File f = SPIFFS.open("/whitelist", "r");
+    if (!f)
+        return;
+
+    while (f.available())
     {
-        Serial.printf("\nResolv took %lu ms", resolvMs);
-        Serial.printf(" | Find took %lu ms\n", proccessMs);
-        enqueueDnsLog(false, dom.c_str(), resolvMs, proccessMs);
+        String line = f.readStringUntil('\n');
+        line.trim();
+        if (line.length() > 0)
+            whiteList.push_back(line);
     }
-    
-    return ip;
+    f.close();
+}
+
+void setupBlockList()
+{
+    blockList.clear();
+
+    File f = SPIFFS.open("/blockList", "r");
+    if (!f)
+        return;
+
+    while (f.available())
+    {
+        String line = f.readStringUntil('\n');
+        line.trim();
+        if (line.length() > 0)
+            blockList.push_back(line);
+    }
+    f.close();
 }
 
 void setupLogQueue()
@@ -160,12 +251,12 @@ void statsTask(void *arg)
     {
         if (xQueueReceive(dnsLogQueue, &ev, portMAX_DELAY))
         {
-            recordQuery(ev.blocked, ev.domain, ev.resolveMs, ev.proccessMs);
+            recordQuery(ev.blocked, ev.domain, ev.resolveMs, ev.processMs);
         }
     }
 }
 
-void enqueueDnsLog(bool blocked, const char *domain, uint32_t resolvMs, uint32_t proccessMs)
+void enqueueDnsLog(bool blocked, const char *domain, uint32_t resolvMs, uint32_t processMs)
 {
     if (!dnsLogQueue)
         return;
@@ -173,7 +264,7 @@ void enqueueDnsLog(bool blocked, const char *domain, uint32_t resolvMs, uint32_t
     DnsLogEvent ev{};
     ev.blocked = blocked;
     ev.resolveMs = resolvMs;
-    ev.proccessMs = proccessMs;
+    ev.processMs = processMs;
     strncpy(ev.domain, domain, MAX_DOMAIN_LEN - 1);
 
     // Do NOT block DNS if queue is full

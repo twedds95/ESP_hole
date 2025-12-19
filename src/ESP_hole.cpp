@@ -56,7 +56,7 @@ void setup()
     }
 
     setupBloom();
-    setupLogQueue();
+    setupDNSHelper();
     Serial.println("DNS Server ready");
     Serial.println("Upstream DNSs:");
     Serial.println(WiFi.dnsIP(0));
