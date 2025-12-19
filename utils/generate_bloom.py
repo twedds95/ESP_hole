@@ -3,10 +3,12 @@ from pathlib import Path
 
 DATA_DIR = Path("./data_doms")
 
-def build_bloom():
+# defaults
+DEFAULT_BITS = 10_000_000
+DEFAULT_HASHES = 6
+
+def build_bloom(BITS=DEFAULT_BITS, HASHES=DEFAULT_HASHES):
     # ---- CONFIG ----
-    BITS = 12_500_000
-    HASHES = 7
     OUT_FILE =  f"data/bloom.bin"
     HOSTS_GLOB = "hosts_*"
 
@@ -62,13 +64,15 @@ def build_bloom():
                 count += 1
                 
     n = float(count) #num domains
+    if n < 50_000.0: #minimum realistic number of domains for a DNS
+        n = 50_000.0
     m = float(BITS) #num bits
     k = float(HASHES) #num hashes
 
     p = float(1.0 - math.exp(-k * n / m))**k
 
-    print(f"False Positives %: {p}")
-    print(f"False Positives Estimate: {p*n}")
+    print(f"False Positives %: {(p * 100):.4f}")
+    print(f"On a random set of {int(n):,} domains, ~{(p * n):.1f} domains would get blocked that should not be.")
 
     Path("./data").mkdir(parents=True, exist_ok=True)
     with open(OUT_FILE, "wb") as f:
@@ -77,8 +81,16 @@ def build_bloom():
     print(f"Bloom built: {count} domains")
     print(f"Size: {BYTES / 1024:.1f} KB")
 
-def main():
-    build_bloom()
     
 if __name__ == "__main__":
-    main()
+    import argparse
+
+    parser = argparse.ArgumentParser(description=f"Generates Bloom filter bin file using {DATA_DIR}")
+
+    parser.add_argument("-m", "--bits", type=float, default=DEFAULT_BITS,
+                        help=f"Number of bits (default: {DEFAULT_BITS})")
+    parser.add_argument("-k", "--hashes", type=float, default=DEFAULT_HASHES,
+                        help=f"Number of hash functions (default: {DEFAULT_HASHES})")
+    
+    args = parser.parse_args()
+    build_bloom(args.bits, args.hashes)
