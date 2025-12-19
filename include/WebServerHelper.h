@@ -18,6 +18,7 @@ struct DnsLogEvent
   uint32_t resolveMs;
   uint32_t processMs;
   bool blocked;
+  bool wasSentUpstream;
   char domain[MAX_DOMAIN_LEN];
 };
 
@@ -50,7 +51,7 @@ struct DomainStat
 {
   char domain[MAX_DOMAIN_LEN];
   uint32_t count;
-  bool isReachedUpstream;
+  bool wasSentUpstream;
 };
 
 void handleRoot();
@@ -66,11 +67,11 @@ void appendTopArray(String &json, DomainStat arr[]);
 String getJsonStats();
 void handleTimeSensitiveRotations();
 void decayTopDomains(DomainStat arr[]);
-void recordQuery(bool blocked, const char *domain, uint32_t resolveTime, uint32_t procTime);
+void recordQuery(bool blocked, const char *domain, bool wasSentUpstream, uint32_t resolveTime, uint32_t procTime);
 void sanitizeDomain(const char *dom, char *domain);
-void updateTopBlocked(const char *domain, bool isReachedUpstream);
-void updateTopQueried(const char *domain, bool isReachedUpstream);
-void updateTop(DomainStat arr[], const char *dom, bool isReachedUpstream);
+void updateTopBlocked(const char *domain, bool wasSentUpstream);
+void updateTopQueried(const char *domain, bool wasSentUpstream);
+void updateTop(DomainStat arr[], const char *dom, bool wasSentUpstream);
 void removeFromTopList(DomainStat arr[], const char *dom);
 
 #endif //WEBSERVERHELPER_H

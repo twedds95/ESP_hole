@@ -18,6 +18,9 @@ const std::vector<String>& getBlockList();
 bool addRewriteRule(const char* domain, const char* ipStr);
 bool addWhiteListEntry(const String& entry);
 bool addBlockListEntry(const String& entry);
+bool addListEntry(const String &entry, const char* fName, std::vector<String> &list);
+bool removeListEntry(const String &entry, const char* fName, std::vector<String> &list);
+
 
 void setupDNSLists();
 

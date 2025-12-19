@@ -83,13 +83,13 @@ IPAddress sendUpstream(const char *dom, IPAddress &ip, uint32_t processMs)
     {
         Serial.printf("\n Block by upstream took %lu ms", resolvMs);
         Serial.printf(" | Find took %lu ms\n", processMs);
-        enqueueDnsLog(true, dom, resolvMs, processMs);
+        enqueueDnsLog(true, dom, true, resolvMs, processMs);
     }
     else
     {
         Serial.printf("\nResolv took %lu ms", resolvMs);
         Serial.printf(" | Find took %lu ms\n", processMs);
-        enqueueDnsLog(false, dom, resolvMs, processMs);
+        enqueueDnsLog(false, dom, true, resolvMs, processMs);
     }
 
     return ip;
@@ -118,7 +118,7 @@ IPAddress handleDNSRequest(String dom)
         Serial.print(" | IP:");
         Serial.print(ip);
         Serial.printf("\nRewrite took %lu ms\n", rewriteMs);
-        enqueueDnsLog(false, dom.c_str(), rewriteMs, 0);
+        enqueueDnsLog(false, dom.c_str(), false, rewriteMs, 0);
         return ip;
     }
 
@@ -132,7 +132,7 @@ IPAddress handleDNSRequest(String dom)
     if (isBlock)
     {
         Serial.printf(" Blocked | Find took %lu ms\n", processMs);
-        enqueueDnsLog(true, dom.c_str(), processMs, 0);
+        enqueueDnsLog(true, dom.c_str(), false, processMs, 0);
         return IPAddress(0, 0, 0, 0);
     }
 
@@ -167,12 +167,12 @@ void statsTask(void *arg)
     {
         if (xQueueReceive(dnsLogQueue, &ev, portMAX_DELAY))
         {
-            recordQuery(ev.blocked, ev.domain, ev.resolveMs, ev.processMs);
+            recordQuery(ev.blocked, ev.domain, ev.wasSentUpstream, ev.resolveMs, ev.processMs);
         }
     }
 }
 
-void enqueueDnsLog(bool blocked, const char *domain, uint32_t resolvMs, uint32_t processMs)
+void enqueueDnsLog(bool blocked, const char *domain, bool wasSentUpstream, uint32_t resolvMs, uint32_t processMs)
 {
     if (!dnsLogQueue)
         return;
@@ -181,6 +181,7 @@ void enqueueDnsLog(bool blocked, const char *domain, uint32_t resolvMs, uint32_t
     ev.blocked = blocked;
     ev.resolveMs = resolvMs;
     ev.processMs = processMs;
+    ev.wasSentUpstream = wasSentUpstream;
     strncpy(ev.domain, domain, MAX_DOMAIN_LEN - 1);
 
     // Do NOT block DNS if queue is full

@@ -48,33 +48,64 @@ bool addRewriteRule(const char *domain, const char *ipStr)
 
 bool addWhiteListEntry(const String &entry)
 {
-    File f = SPIFFS.open("/whitelist", FILE_APPEND);
-    if (!f)
-    {
-        Serial.println("ERROR: Failed to open whitelist file");
-        return false;
-    }
-
-    f.println(entry);
-    f.close();
-
-    whiteList.push_back(entry);
-    return true;
+    removeListEntry(entry, "/blocklist", blockList);
+    return addListEntry(entry, "/whitelist", whiteList);
 }
 
 bool addBlockListEntry(const String &entry)
 {
-    File f = SPIFFS.open("/blockList", FILE_APPEND);
+    removeListEntry(entry, "/whitelist", whiteList);
+    return addListEntry(entry, "/blocklist", blockList);
+}
+
+bool addListEntry(const String &entry, const char* fName, std::vector<String> &list)
+{
+    File f = SPIFFS.open(fName, FILE_APPEND);
     if (!f)
     {
-        Serial.println("ERROR: Failed to open block file");
+        Serial.printf("ERROR: Failed to open %s file\n", fName);
         return false;
     }
 
     f.println(entry);
     f.close();
 
-    blockList.push_back(entry);
+    list.push_back(entry);
+    return true;
+}
+
+bool removeListEntry(const String &entry, const char* fName, std::vector<String> &list)
+{
+    bool found = false;
+    for (auto it = list.begin(); it != list.end(); ++it)
+    {
+        if (*it == entry)
+        {
+            list.erase(it);
+            found = true;
+            break;
+        }
+    }
+
+    if (!found)
+    {
+        Serial.printf("INFO: Entry '%s' not found in list\n", entry.c_str());
+        return false;
+    }
+
+    File f = SPIFFS.open(fName, FILE_WRITE);
+    if (!f)
+    {
+        Serial.printf("ERROR: Failed to rewrite %s\n", fName);
+        return false;
+    }
+
+    for (const auto &e : list)
+    {
+        f.println(e);
+    }
+
+    f.close();
     return true;
 }
 
