@@ -59,7 +59,7 @@ Upload the **bloom.bin** and (optional) **rewrite** files to the ESP. This is tr
 
 ### Upload the sketch
 
-This version of the project does not require any edits to the source code, as after uploading to the ESP you first run will generate a captive portal for you to input the wifi settings you wish to connect this device to. The captive portal SSID is **AutoConnectAP_ESPHOLE**, and has password **ESP32_Connect** (I guess you could modify these if you wish). 
+This version of the project does not require any edits to the source code, as after uploading to the ESP your first run will generate a captive portal for you to input the wifi settings you wish to connect this device to. The captive portal SSID is **AutoConnectAP_ESPHOLE**, and has password **ESP32_Connect** (I guess you could modify these if you wish). 
 
 You may also wish to edit the upstream DNS servers used. These can be edited at the top of *src/ESP_hole.cpp* and are currently using two servers from privacy oriented providers with included filtering to block ads, trackers and phishing websites. 
 
