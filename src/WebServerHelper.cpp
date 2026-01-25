@@ -2,22 +2,12 @@
 
 AsyncWebServer server(80);
 
-// Data
-DomainStat topBlocked[TOP_N_TRACKED];
-DomainStat topQueried[TOP_N_TRACKED];
 unsigned long lastHourTick = 0;
 unsigned long lastPersistedTick = 0;
 
 // #Persisted Stats
 Preferences prefs;
 PersistedStats stats;
-
-#define totalQueries stats._totalQueries
-#define totalBlocked stats._totalBlocked
-#define totalResponseTime stats._responseTime
-#define totalAddedTime stats._processTime
-#define hourly stats._hourly
-#define currentHour stats._currentHour
 
 void savePersistedStats()
 {
