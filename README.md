@@ -47,10 +47,9 @@ Script Output:
 
 You can also make modifications to the generated **hosts_d** files in the **data_doms** directory and run **utils/generate_bloom.py** directly if there are domains that you really want blocked that were not included by the filters. 
 
-A **rewrite** file can also be added in the **data** folder if you wish to add some custom local domains, similar to the Adguard Home DNS rewrites. Each line should contain the domain name (or substring if needed), with a comma and the ip it should point to. The file should also contain a _,@@@_ like the generated block list files. The example below shows that I want the home.page.com domain to point to my local homepage docker instance on 192.168.0.150 (on port 80, so does not need to be specified).
+A **rewrite** file can also be added in the **data** folder if you wish to add some custom local domains, similar to the Adguard Home DNS rewrites. Each line should contain the domain name (or substring if needed), with a comma and the ip it should point to. The example below shows that I want the home.page.com domain to point to my local homepage docker instance on 192.168.0.150 (on port 80, so does not need to be specified).
 
     home.page.com,192.168.0.150
-    ,@@@
 
 
 ### Upload the SPIFFS
@@ -113,6 +112,3 @@ In the serial monitor the debug information is shown:
 
 
 ## TODOS:
-
-1. Add pages to manually update whitelist and blocklist options from the dashboard
-    - only possible for domains that appear in the top 10s currently

@@ -31,8 +31,17 @@
         gap: 12px;
       }
 
-      h1 {
-        margin-bottom: 10px;
+      #header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+      }
+
+      #header h1 {
+        margin: 0;
+        font-size: 1.4rem;
+        white-space: nowrap;
       }
 
       .stat {
@@ -106,11 +115,87 @@
       #emptyState h3 {
         margin-bottom: 8px;
       }
+
+      .menu {
+        position: relative;
+      }
+
+      #menuBtn {
+        font-size: 20px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: #eee;
+      }
+
+      .menu-content {
+        display: none;
+        position: absolute;
+        top: 100%;
+        right: 0;
+        margin-top: 6px;
+        background: #1e1e1e;
+        border: 1px solid #444;
+        border-radius: 6px;
+        min-width: 160px;
+        z-index: 1000;
+      }
+
+      .menu-content div {
+        padding: 10px;
+        cursor: pointer;
+      }
+
+      .menu-content div:hover {
+        background: #333;
+      }
+
+      .overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 2000;
+      }
+
+      .editor {
+        background: #111;
+        border-radius: 8px;
+        width: min(600px, 90%);
+        margin: 10vh auto;
+        padding: 12px;
+      }
+
+      .editor textarea {
+        width: 100%;
+        height: 240px;
+        background: #000;
+        color: #eee;
+        border: 1px solid #444;
+        resize: vertical;
+      }
+
+      .editorButtons {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 8px;
+      }
     </style>
   </head>
 
   <body>
-    <h1>ESP_hole Dashboard</h1>
+    <div id="header">
+      <h1>ESP_hole Dashboard</h1>
+      <button id="menuBtn" title="Edit Lists">☰</button>
+    </div>
+    <div class="menu">
+      <div id="menu" class="menu-content">
+        <div onclick="openEditor('rewrite')">Edit Rewrite</div>
+        <div onclick="openEditor('blocklist')">Edit Block List</div>
+        <div onclick="openEditor('whitelist')">Edit Whitelist</div>
+      </div>
+    </div>
 
     <div id="emptyState" class="card" style="display:none; text-align:center;">
       <h3>😴 Nothing yet</h3>
@@ -167,6 +252,19 @@
       <h3>Memory</h3>
       <div>Free Heap: <span id="heapfree">0</span> bytes</div>
       <div>Min Heap: <span id="heapmin">0</span> bytes</div>
+
+      <div id="editorOverlay" class="overlay">
+        <div class="editor">
+          <h3 id="editorTitle"></h3>
+          <textarea id="editorArea"></textarea>
+
+          <div class="editorButtons">
+            <button onclick="applyEditor()">OK</button>
+            <button onclick="closeEditor()">Cancel</button>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <script>
@@ -218,6 +316,7 @@
 
       const canvas = document.getElementById("chart");
       const ctx = canvas.getContext("2d");
+      const pad = { l: 36, r: 36, t: 20, b: 30 };
       let canvasSize = { width: 0, height: 0 };
       let hoverHour = -1;
       let lastHover = -1;
@@ -226,8 +325,9 @@
         const rect = canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
 
+        const plotW = canvasSize.width - pad.l - pad.r;
         const hour = Math.floor(
-          (x - pad.left) / (plotW / 24)
+          (x - pad.l) / (plotW / 24)
         );
 
         hoverHour = (hour >= 0 && hour < 24) ? hour : -1;
@@ -279,7 +379,6 @@
 
         if (!hours || hours.length === 0) return;
 
-        const pad = { l: 36, r: 36, t: 20, b: 30 };
         const plotW = width - pad.l - pad.r;
         const plotH = height - pad.t - pad.b;
         const stepX = plotW / 24;
@@ -291,32 +390,29 @@
         const maxQ = Math.max(1, ...queries);
         const maxMs = Math.max(1, ...avgMs);
 
-        drawAxes(pad, width, height, plotH, maxQ, maxMs);
-        drawBars(hours, pad, plotH, stepX, barW, maxQ);
-        drawAvgLine(avgMs, pad, plotH, stepX, maxMs);
-        drawHourLabels(hours, pad, plotH, stepX);
+        drawAxes(width, height, plotH, maxQ, maxMs);
+        drawBars(hours, plotH, stepX, barW, maxQ);
+        drawAvgLine(avgMs, plotH, stepX, maxMs);
+        drawHourLabels(hours, plotH, stepX);
         if (hoverHour >= 0) {
-          drawTooltip(hours, hoverHour, pad, plotH, plotW);
+          drawTooltip(hours, hoverHour, plotH, plotW);
         }
       }
 
-      function drawAxes(pad, width, height, plotH, maxQ, maxMs) {
+      function drawAxes(width, height, plotH, maxQ, maxMs) {
         ctx.strokeStyle = "#aaa";
         ctx.lineWidth = 1;
 
-        // Left Y
         ctx.beginPath();
         ctx.moveTo(pad.l, pad.t);
         ctx.lineTo(pad.l, pad.t + plotH);
         ctx.stroke();
 
-        // Right Y
         ctx.beginPath();
         ctx.moveTo(width - pad.r, pad.t);
         ctx.lineTo(width - pad.r, pad.t + plotH);
         ctx.stroke();
 
-        // X
         ctx.beginPath();
         ctx.moveTo(pad.l, pad.t + plotH);
         ctx.lineTo(width - pad.r, pad.t + plotH);
@@ -333,12 +429,10 @@
         const xR = width - pad.r + 6;
         for (let i = 0; i <= numSteps; i++) {
           const y = pad.t + plotH - (i * stepY);
-          // Left labels
           ctx.textAlign = "right";
           const valQ = Math.round(i * (maxQ / numSteps))
           const labelQ = `${valQ}`;
           ctx.fillText(labelQ, xL, y);
-          // Right labels
           ctx.textAlign = "left";
           const valMS = Math.round(i * (maxMs / numSteps))
           const labelMs = `${valMS} ms`;
@@ -346,7 +440,7 @@
         }
       }
 
-      function drawBars(hours, pad, plotH, stepX, barW, maxQ) {
+      function drawBars(hours, plotH, stepX, barW, maxQ) {
         hours.forEach((hr, i) => {
           const x = pad.l + i * stepX + (stepX - barW) / 2;
 
@@ -361,7 +455,7 @@
         });
       }
 
-      function drawAvgLine(avgMs, pad, plotH, stepX, maxMs) {
+      function drawAvgLine(avgMs, plotH, stepX, maxMs) {
         ctx.strokeStyle = "#ffb347";
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -392,7 +486,7 @@
         });
       }
 
-      function drawHourLabels(hours, pad, plotH, stepX) {
+      function drawHourLabels(hours, plotH, stepX) {
         ctx.fillStyle = "#888";
         ctx.font = "11px system-ui, sans-serif";
         ctx.textAlign = "center";
@@ -410,14 +504,13 @@
         }
       }
 
-      function drawTooltip(hours, i, pad, plotH, plotW) {
+      function drawTooltip(hours, i, plotH, plotW) {
         const h = hours[i];
-        if (!h) return;
+        if (!h || !h.q || h.q === 0) return;
 
         const avgMs = h.q ? (h.t / h.q).toFixed(1) : "0";
 
         const lines = [
-          `Hour: -${24 - i}h`,
           `Queries: ${h.q}`,
           `Blocked: ${h.b}`,
           `Avg ms: ${avgMs}`
@@ -449,13 +542,6 @@
         lines.forEach((l, n) => {
           ctx.fillText(l, tx + padding, ty + padding + (n + 1) * lineH - 4);
         });
-
-        // Vertical guide line
-        ctx.strokeStyle = "#888";
-        ctx.beginPath();
-        ctx.moveTo(x, pad.t);
-        ctx.lineTo(x, pad.t + plotH);
-        ctx.stroke();
       }
 
       function renderTop(id, list, mode) {
@@ -498,6 +584,110 @@
           }
           ul.appendChild(li);
         });
+      }
+
+      menuBtn.onclick = () => {
+        menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+      };
+
+      document.addEventListener('click', e => {
+        if (!menu.contains(e.target) && e.target !== menuBtn)
+          menu.style.display = 'none';
+      });
+
+      let currentEdit = null;
+      let cachedLists = {};
+
+      async function openEditor(type) {
+        currentEdit = type;
+        menu.style.display = 'none';
+
+        const res = await fetch(`/list/${type}`);
+        const data = await res.text();
+
+        editorTitle.textContent =
+          type === 'rewrite' ? 'Edit Rewrite Rules'
+            : type === 'blocklist' ? 'Edit Block List'
+              : 'Edit Whitelist';
+
+        editorArea.value = data.trim();
+        editorOverlay.style.display = 'block';
+
+        const others = ['rewrite', 'blocklist', 'whitelist'].filter(x => x !== type);
+        for (const o of others) {
+          cachedLists[o] = (await fetch(`/list/${o}`).then(r => r.text()))
+            .split('\n')
+            .map(x => x.trim())
+            .filter(Boolean);
+        }
+      }
+
+      async function applyEditor() {
+        const lines = editorArea.value
+          .split('\n')
+          .map(l => l.trim())
+          .filter(Boolean);
+
+        if (lines.length === 0) {
+          if (!confirm(`Clear ${currentEdit} list?`)) return;
+        }
+
+        if (lines.length === 0) {
+          const clearRes = await fetch(`/list/${currentEdit}`, {
+            method: 'POST', headers: {
+              "Content-Type": "text/plain"
+            },
+            body: "\0"
+          });
+
+          if (!clearRes.ok) {
+            alert("Failed to clear list");
+            return;
+          }
+
+          cachedLists[currentEdit] = [];
+          closeEditor();
+          loadStats();
+          return;
+        }
+
+        if (currentEdit === "blocklist" && lines.length > 50) {
+          alert("This block list is getting pretty long, consider re-running the preprocessing scripts to include these domains.");
+        }
+
+        const domains = lines.map(l => l.split(',')[0]);
+        for (const [list, values] of Object.entries(cachedLists)) {
+          if (list === currentEdit) continue;
+          for (const d of domains) {
+            if (values.some(v => v.startsWith(d + ',') || v === d)) {
+              alert(`Conflict: "${d}" exists in ${list}`);
+              return;
+            }
+            if (currentEdit === "rewrite" && values.some(v => !v.startsWith(d + ','))) {
+              alert("Rewrite list should be in the form: 'mywebsitedomain.com,10.0.0.99' for each entry.");
+              return;
+            }
+          }
+        }
+
+        const res = await fetch(`/list/${currentEdit}`, {
+          method: 'POST',
+          body: lines.join('\n')
+        });
+
+        if (!res.ok) {
+          alert("Update failed");
+          return;
+        }
+
+        cachedLists[currentEdit] = lines;
+        closeEditor();
+        loadStats();
+      }
+
+      function closeEditor() {
+        editorOverlay.style.display = 'none';
+        currentEdit = null;
       }
 
       resizeCanvas();

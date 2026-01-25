@@ -71,7 +71,14 @@ extern PersistedStats stats;
 
 void handleRoot();
 void handleStats();
-void handleListAdds();
+void emptyRequestHandler(AsyncWebServerRequest * request);
+void handleLists();
+const char *getListPath(const String &name);
+String getListName(AsyncWebServerRequest *req);
+void handleGetList(AsyncWebServerRequest *req);
+void reloadLists();
+void handlePostList(AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t index, size_t total);
+void handleListUpdates();
 
 void savePersistedStats();
 void loadPersistedStats();

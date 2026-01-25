@@ -166,7 +166,7 @@ void setupBlockList()
 {
     blockList.clear();
 
-    File f = SPIFFS.open("/blockList", "r");
+    File f = SPIFFS.open("/blocklist", "r");
     if (!f)
         return;
 

@@ -5,9 +5,21 @@ AsyncWebServer server(80);
 unsigned long lastHourTick = 0;
 unsigned long lastPersistedTick = 0;
 
-// #Persisted Stats
 Preferences prefs;
 PersistedStats stats;
+
+struct ListDef
+{
+  const char *name;
+  const char *path;
+};
+
+ListDef lists[] = {
+    {"blocklist", "/blocklist"},
+    {"whitelist", "/whitelist"},
+    {"rewrite", "/rewrite"}};
+
+const int LIST_COUNT = sizeof(lists) / sizeof(lists[0]);
 
 void savePersistedStats()
 {
@@ -49,6 +61,113 @@ void handleStats()
 {
   server.on("/stats", HTTP_GET, [](AsyncWebServerRequest *request)
             { request->send(200, "application/json", getJsonStats()); });
+}
+
+void emptyRequestHandler(AsyncWebServerRequest *request) {};
+void handleLists()
+{
+  server.on("/list/blocklist", HTTP_GET, handleGetList);
+  server.on("/list/whitelist", HTTP_GET, handleGetList);
+  server.on("/list/rewrite", HTTP_GET, handleGetList);
+
+  server.on("/list/blocklist", HTTP_POST, emptyRequestHandler, nullptr, handlePostList);
+  server.on("/list/whitelist", HTTP_POST, emptyRequestHandler, nullptr, handlePostList);
+  server.on("/list/rewrite", HTTP_POST, emptyRequestHandler, nullptr, handlePostList);
+}
+
+const char *getListPath(const String &name)
+{
+  for (int i = 0; i < LIST_COUNT; i++)
+  {
+    if (name == lists[i].name)
+      return lists[i].path;
+  }
+  return nullptr;
+}
+
+String getListName(AsyncWebServerRequest *req)
+{
+  String url = req->url();
+  return url.substring(url.lastIndexOf('/') + 1);
+}
+
+void handleGetList(AsyncWebServerRequest *req)
+{
+  String name = getListName(req);
+  const char *path = getListPath(name);
+
+  if (!path)
+  {
+    req->send(404, "text/plain", "Invalid list");
+    return;
+  }
+
+  if (!SPIFFS.exists(path))
+  {
+    req->send(200, "text/plain", "");
+    return;
+  }
+
+  File f = SPIFFS.open(path, "r");
+  if (!f)
+  {
+    req->send(500, "text/plain", "File open failed");
+    return;
+  }
+
+  AsyncWebServerResponse *res =
+      req->beginResponse(f, "text/plain");
+
+  res->addHeader("Cache-Control", "no-store");
+  req->send(res);
+}
+
+void reloadLists()
+{
+  setupBlockList();
+  setupWhiteList();
+  setupRewrite();
+}
+
+void handlePostList(AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t index, size_t total)
+{
+  if (index != 0)
+    return;
+
+  String name = getListName(req);
+  const char *path = getListPath(name);
+
+  if (!path)
+  {
+    req->send(404, "text/plain", "Invalid list");
+    return;
+  }
+
+  if (total == 0 || req->contentLength() == 0)
+  {
+    SPIFFS.remove(path);
+    reloadLists();
+    req->send(200, "text/plain", "List cleared");
+    return;
+  }
+
+  const char *tmp = "/tmp_list.txt";
+
+  File f = SPIFFS.open(tmp, "w");
+  if (!f)
+  {
+    req->send(500, "text/plain", "Temp open failed");
+    return;
+  }
+
+  f.write(data, total);
+  f.close();
+
+  SPIFFS.remove(path);
+  SPIFFS.rename(tmp, path);
+
+  reloadLists();
+  req->send(200, "text/plain", "OK");
 }
 
 void handleWhitelistAdds()
@@ -126,11 +245,12 @@ void handleRewriteAdds()
       } });
 }
 
-void handleListAdds()
+void handleListUpdates()
 {
   handleWhitelistAdds();
   handleBlocklistAdds();
   handleRewriteAdds();
+  handleLists();
 }
 
 void setupServerHelper()
@@ -139,7 +259,7 @@ void setupServerHelper()
 
   handleRoot();
   handleStats();
-  handleListAdds();
+  handleListUpdates();
 
   server.begin();
   Serial.println("ESP_hole Dashboard started on:");
@@ -268,7 +388,6 @@ void recordQuery(bool blocked, const char *domain, bool wasSentUpstream, uint32_
   totalAddedTime += procTime;
   hourly[currentHour].hourProcessTime += procTime;
 
-  // procTime of 0 means query was not sent to upstream
   if (blocked)
   {
     totalBlocked++;
@@ -361,7 +480,7 @@ void removeFromTopList(DomainStat arr[], const char *dom)
       strncpy(arr[i].domain, "", MAX_DOMAIN_LEN);
       arr[i].count = 0;
       arr[i].wasSentUpstream = true;
-      arr[i].ip = IPAddress(0,0,0,0);
+      arr[i].ip = IPAddress(0, 0, 0, 0);
       return;
     }
   }
