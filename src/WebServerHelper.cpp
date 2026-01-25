@@ -269,7 +269,7 @@ String getJsonStats()
   return json;
 }
 
-void recordQuery(bool blocked, const char *domain, bool wasSentUpstream, uint32_t resolveTime, uint32_t procTime)
+void recordQuery(bool blocked, const char *domain, bool wasSentUpstream, uint32_t resolveTime, uint32_t procTime, IPAddress ip)
 {
   totalQueries++;
   hourly[currentHour].queries++;
@@ -287,7 +287,7 @@ void recordQuery(bool blocked, const char *domain, bool wasSentUpstream, uint32_
   }
   else
   {
-    updateTopQueried(domain, wasSentUpstream);
+    updateTopQueried(domain, wasSentUpstream, ip);
   }
 }
 
@@ -313,12 +313,12 @@ void updateTopBlocked(const char *domain, bool wasSentUpstream)
   updateTop(topBlocked, domain, wasSentUpstream);
 }
 
-void updateTopQueried(const char *domain, bool wasSentUpstream)
+void updateTopQueried(const char *domain, bool wasSentUpstream, IPAddress ip)
 {
-  updateTop(topQueried, domain, wasSentUpstream);
+  updateTop(topQueried, domain, wasSentUpstream, ip);
 }
 
-void updateTop(DomainStat arr[], const char *dom, bool wasSentUpstream)
+void updateTop(DomainStat arr[], const char *dom, bool wasSentUpstream, IPAddress ip)
 {
   char domain[MAX_DOMAIN_LEN];
   sanitizeDomain(dom, domain);
@@ -328,7 +328,6 @@ void updateTop(DomainStat arr[], const char *dom, bool wasSentUpstream)
     if (arr[i].count && strcmp(arr[i].domain, domain) == 0)
     {
       arr[i].count++;
-      arr[i].wasSentUpstream = wasSentUpstream;
       return;
     }
   }
@@ -341,6 +340,7 @@ void updateTop(DomainStat arr[], const char *dom, bool wasSentUpstream)
       strncpy(arr[i].domain, domain, MAX_DOMAIN_LEN);
       arr[i].count = 1;
       arr[i].wasSentUpstream = wasSentUpstream;
+      arr[i].ip = ip;
       return;
     }
   }
@@ -356,6 +356,7 @@ void updateTop(DomainStat arr[], const char *dom, bool wasSentUpstream)
   strncpy(arr[minIdx].domain, domain, MAX_DOMAIN_LEN);
   arr[minIdx].count = 1;
   arr[minIdx].wasSentUpstream = wasSentUpstream;
+  arr[minIdx].ip = ip;
 }
 
 void removeFromTopList(DomainStat arr[], const char *dom)
@@ -370,6 +371,7 @@ void removeFromTopList(DomainStat arr[], const char *dom)
       strncpy(arr[i].domain, "", MAX_DOMAIN_LEN);
       arr[i].count = 0;
       arr[i].wasSentUpstream = true;
+      arr[i].ip = IPAddress(0,0,0,0);
       return;
     }
   }

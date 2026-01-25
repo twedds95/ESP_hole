@@ -5,7 +5,6 @@
 #include <WebServerHelper.h>
 #include <WiFi.h>
 
-
 QueueHandle_t dnsLogQueue;
 
 bool isEasyBlock(const char *domain)
@@ -72,6 +71,29 @@ bool isRewrite(const char *domain, IPAddress &ip)
     return false;
 }
 
+bool isCached(const char *domain, IPAddress &ip)
+{
+    for (int i = 0; i < TOP_N_TRACKED; i++)
+    {
+        if (topQueried[i].count && strcmp(topQueried[i].domain, domain) == 0)
+        {
+            ip = topQueried[i].ip;
+            return true;
+        }
+    }  
+    
+    for (int i = 0; i < TOP_N_TRACKED; i++)
+    {
+        if (topBlocked[i].count && strcmp(topBlocked[i].domain, domain) == 0)
+        {
+            ip = IPAddress(0,0,0,0);
+            return true;
+        }
+    }
+
+    return false;
+}
+
 IPAddress sendUpstream(const char *dom, IPAddress &ip, uint32_t processMs)
 {
     uint32_t oMillis = millis();
@@ -89,7 +111,7 @@ IPAddress sendUpstream(const char *dom, IPAddress &ip, uint32_t processMs)
     {
         Serial.printf("\nResolv took %lu ms", resolvMs);
         Serial.printf(" | Find took %lu ms\n", processMs);
-        enqueueDnsLog(false, dom, true, resolvMs, processMs);
+        enqueueDnsLog(false, dom, true, resolvMs, processMs, ip);
     }
 
     return ip;
@@ -118,7 +140,17 @@ IPAddress handleDNSRequest(String dom)
         Serial.print(" | IP:");
         Serial.print(ip);
         Serial.printf("\nRewrite took %lu ms\n", rewriteMs);
-        enqueueDnsLog(false, dom.c_str(), false, rewriteMs, 0);
+        enqueueDnsLog(false, dom.c_str(), false, rewriteMs, 0, ip);
+        return ip;
+    }
+
+    if (isCached(dom.c_str(), ip))
+    {
+        uint32_t cacheLookupMs = millis() - oMillis;
+        Serial.print(" | IP:");
+        Serial.print(ip);
+        Serial.printf("\nFind in cache took %lu ms\n", cacheLookupMs);
+        enqueueDnsLog(ip == IPAddress(0, 0, 0, 0), dom.c_str(), false, cacheLookupMs, 0, ip);
         return ip;
     }
 
@@ -167,12 +199,12 @@ void statsTask(void *arg)
     {
         if (xQueueReceive(dnsLogQueue, &ev, portMAX_DELAY))
         {
-            recordQuery(ev.blocked, ev.domain, ev.wasSentUpstream, ev.resolveMs, ev.processMs);
+            recordQuery(ev.blocked, ev.domain, ev.wasSentUpstream, ev.resolveMs, ev.processMs, ev.ip);
         }
     }
 }
 
-void enqueueDnsLog(bool blocked, const char *domain, bool wasSentUpstream, uint32_t resolvMs, uint32_t processMs)
+void enqueueDnsLog(bool blocked, const char *domain, bool wasSentUpstream, uint32_t resolvMs, uint32_t processMs, IPAddress ip)
 {
     if (!dnsLogQueue)
         return;
@@ -182,6 +214,7 @@ void enqueueDnsLog(bool blocked, const char *domain, bool wasSentUpstream, uint3
     ev.resolveMs = resolvMs;
     ev.processMs = processMs;
     ev.wasSentUpstream = wasSentUpstream;
+    ev.ip = ip;
     strncpy(ev.domain, domain, MAX_DOMAIN_LEN - 1);
 
     // Do NOT block DNS if queue is full

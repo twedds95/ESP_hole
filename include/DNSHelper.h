@@ -14,6 +14,6 @@ IPAddress handleDNSRequest(String domain);
 
 void setupLogQueue();
 void statsTask(void *arg);
-void enqueueDnsLog(bool blocked, const char *domain, bool wasSentUpstream, uint32_t resolveMs, uint32_t addedMs);
+void enqueueDnsLog(bool blocked, const char *domain, bool wasSentUpstream, uint32_t resolveMs, uint32_t addedMs, IPAddress ip = IPAddress(0,0,0,0));
 
 #endif //DNSHELPER_H

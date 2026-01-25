@@ -13,6 +13,17 @@
 #define TOP_N_TRACKED 50
 #define MAX_DOMAIN_LEN 48
 
+struct DomainStat
+{
+  char domain[MAX_DOMAIN_LEN];
+  uint32_t count;
+  bool wasSentUpstream;
+  IPAddress ip;
+};
+
+extern DomainStat topBlocked[TOP_N_TRACKED];
+extern DomainStat topQueried[TOP_N_TRACKED];
+
 struct DnsLogEvent
 {
   uint32_t resolveMs;
@@ -20,6 +31,7 @@ struct DnsLogEvent
   bool blocked;
   bool wasSentUpstream;
   char domain[MAX_DOMAIN_LEN];
+  IPAddress ip;
 };
 
 // #Persisted Stats
@@ -47,13 +59,6 @@ struct PersistedStats
   uint8_t _currentHour;
 };
 
-struct DomainStat
-{
-  char domain[MAX_DOMAIN_LEN];
-  uint32_t count;
-  bool wasSentUpstream;
-};
-
 void handleRoot();
 void handleStats();
 void handleListAdds();
@@ -67,11 +72,11 @@ void appendTopArray(String &json, DomainStat arr[]);
 String getJsonStats();
 void handleTimeSensitiveRotations();
 void decayTopDomains(DomainStat arr[]);
-void recordQuery(bool blocked, const char *domain, bool wasSentUpstream, uint32_t resolveTime, uint32_t procTime);
+void recordQuery(bool blocked, const char *domain, bool wasSentUpstream, uint32_t resolveTime, uint32_t procTime, IPAddress ip);
 void sanitizeDomain(const char *dom, char *domain);
 void updateTopBlocked(const char *domain, bool wasSentUpstream);
-void updateTopQueried(const char *domain, bool wasSentUpstream);
-void updateTop(DomainStat arr[], const char *dom, bool wasSentUpstream);
+void updateTopQueried(const char *domain, bool wasSentUpstream, IPAddress ip);
+void updateTop(DomainStat arr[], const char *dom, bool wasSentUpstream, IPAddress ip = IPAddress(0,0,0,0));
 void removeFromTopList(DomainStat arr[], const char *dom);
 
 #endif //WEBSERVERHELPER_H
