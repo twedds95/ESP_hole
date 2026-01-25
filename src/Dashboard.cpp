@@ -219,6 +219,35 @@
       const canvas = document.getElementById("chart");
       const ctx = canvas.getContext("2d");
       let canvasSize = { width: 0, height: 0 };
+      let hoverHour = -1;
+      let lastHover = -1;
+
+      function handlePointer(e) {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+
+        const hour = Math.floor(
+          (x - pad.left) / (plotW / 24)
+        );
+
+        hoverHour = (hour >= 0 && hour < 24) ? hour : -1;
+
+        if (hoverHour !== lastHover) {
+          lastHover = hoverHour;
+          drawChart(lastHours);
+        }
+      }
+
+      canvas.addEventListener("mousemove", handlePointer);
+      canvas.addEventListener("mouseleave", () => {
+        hoverHour = -1;
+        drawChart(lastHours);
+      });
+
+      canvas.addEventListener("touchmove", e => {
+        handlePointer(e.touches[0]);
+        e.preventDefault();
+      }, { passive: false });
 
       function resizeCanvas() {
         const dpr = window.devicePixelRatio || 1;
@@ -266,6 +295,9 @@
         drawBars(hours, pad, plotH, stepX, barW, maxQ);
         drawAvgLine(avgMs, pad, plotH, stepX, maxMs);
         drawHourLabels(hours, pad, plotH, stepX);
+        if (hoverHour >= 0) {
+          drawTooltip(hours, hoverHour, pad, plotH, plotW);
+        }
       }
 
       function drawAxes(pad, width, height, plotH, maxQ, maxMs) {
@@ -376,6 +408,54 @@
 
           ctx.fillText(label, x, y);
         }
+      }
+
+      function drawTooltip(hours, i, pad, plotH, plotW) {
+        const h = hours[i];
+        if (!h) return;
+
+        const avgMs = h.q ? (h.t / h.q).toFixed(1) : "0";
+
+        const lines = [
+          `Hour: -${24 - i}h`,
+          `Queries: ${h.q}`,
+          `Blocked: ${h.b}`,
+          `Avg ms: ${avgMs}`
+        ];
+
+        const x = pad.l + (i + 0.5) * (plotW / 24);
+        const y = pad.t + 10;
+
+        ctx.font = "12px system-ui, sans-serif";
+        const padding = 6;
+        const lineH = 14;
+
+        const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + padding * 2;
+        const hgt = lines.length * lineH + padding * 2;
+
+        let tx = x - w / 2;
+        let ty = y;
+
+        // Keep on canvas
+        if (tx < 4) tx = 4;
+        if (tx + w > canvas.width) tx = canvas.width - w - 4;
+
+        // Box
+        ctx.fillStyle = "rgba(30,30,30,0.9)";
+        ctx.fillRect(tx, ty, w, hgt);
+
+        // Text
+        ctx.fillStyle = "#fff";
+        lines.forEach((l, n) => {
+          ctx.fillText(l, tx + padding, ty + padding + (n + 1) * lineH - 4);
+        });
+
+        // Vertical guide line
+        ctx.strokeStyle = "#888";
+        ctx.beginPath();
+        ctx.moveTo(x, pad.t);
+        ctx.lineTo(x, pad.t + plotH);
+        ctx.stroke();
       }
 
       function renderTop(id, list, mode) {
