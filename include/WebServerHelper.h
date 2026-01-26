@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <DNSOverrideLists.h>
 #include <ESPAsyncWebServer.h>
+#include <EspLogs.h>
 
 #include <Dashboard.cpp>
 
@@ -33,7 +34,7 @@ struct DnsLogEvent
 
 // #Persisted Stats
 #include <Preferences.h>
-#define STATS_VERSION 1
+#define STATS_VERSION 2
 #define STATS_SAVE_ID "esp_hole"
 #define STATS_SAVE_KEY "stats"
 
@@ -58,17 +59,6 @@ struct PersistedStats
   DomainStat _topQueried[TOP_N_TRACKED];
 };
 
-extern PersistedStats stats;
-
-#define totalQueries stats._totalQueries
-#define totalBlocked stats._totalBlocked
-#define totalResponseTime stats._responseTime
-#define totalAddedTime stats._processTime
-#define hourly stats._hourly
-#define currentHour stats._currentHour
-#define topBlocked stats._topBlocked
-#define topQueried stats._topQueried
-
 void handleRoot();
 void handleStats();
 void emptyRequestHandler(AsyncWebServerRequest * request);
@@ -79,6 +69,8 @@ void handleGetList(AsyncWebServerRequest *req);
 void reloadLists();
 void handlePostList(AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t index, size_t total);
 void handleListUpdates();
+const DomainStat* getTopBlocked();
+const DomainStat* getTopQueried();
 
 void savePersistedStats();
 void loadPersistedStats();

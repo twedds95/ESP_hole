@@ -5,6 +5,8 @@
 #include <SPIFFS.h>
 #include <vector>
 
+#include <EspLogs.h>
+
 struct RewriteRule
 {
     String domain;

@@ -2,6 +2,7 @@
 
 #include <BloomCheck.h>
 #include <DNSOverrideLists.h>
+#include <EspLogs.h>
 #include <WebServerHelper.h>
 #include <WiFi.h>
 
@@ -73,6 +74,7 @@ bool isRewrite(const char *domain, IPAddress &ip)
 
 bool isCached(const char *domain, IPAddress &ip)
 {
+    const DomainStat *topQueried = getTopQueried();
     for (int i = 0; i < TOP_N_TRACKED; i++)
     {
         if (topQueried[i].count && strcmp(topQueried[i].domain, domain) == 0)
@@ -82,6 +84,7 @@ bool isCached(const char *domain, IPAddress &ip)
         }
     }  
     
+    const DomainStat *topBlocked = getTopBlocked();
     for (int i = 0; i < TOP_N_TRACKED; i++)
     {
         if (topBlocked[i].count && strcmp(topBlocked[i].domain, domain) == 0)
@@ -99,18 +102,15 @@ IPAddress sendUpstream(const char *dom, IPAddress &ip, uint32_t processMs)
     uint32_t oMillis = millis();
     WiFi.hostByName(dom, ip);
     uint32_t resolvMs = millis() - oMillis;
-    Serial.print(" | IP:");
-    Serial.print(ip);
+    ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::DNS), "IP: %s", ip);
     if (ip == IPAddress(0, 0, 0, 0))
     {
-        Serial.printf("\n Block by upstream took %lu ms", resolvMs);
-        Serial.printf(" | Find took %lu ms\n", processMs);
+        ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::DNS), "Block by upstream took %lu ms | Find took %lu ms", resolvMs, processMs);
         enqueueDnsLog(true, dom, true, resolvMs, processMs);
     }
     else
     {
-        Serial.printf("\nResolv took %lu ms", resolvMs);
-        Serial.printf(" | Find took %lu ms\n", processMs);
+        ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::DNS), "Resolv took %lu ms | Find took %lu ms", resolvMs, processMs);
         enqueueDnsLog(false, dom, true, resolvMs, processMs, ip);
     }
 
@@ -129,17 +129,14 @@ IPAddress handleDNSRequest(String dom)
         return IPAddress(0, 0, 0, 0);
     }
 
-    Serial.println();
-    Serial.print("Domain: ");
-    Serial.print(dom.c_str());
+    ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::DNS), "Domain: %s", dom);
     IPAddress ip;
     uint32_t oMillis = millis();
     if (isRewrite(dom.c_str(), ip))
     {
         uint32_t rewriteMs = millis() - oMillis;
-        Serial.print(" | IP:");
-        Serial.print(ip);
-        Serial.printf("\nRewrite took %lu ms\n", rewriteMs);
+        ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::DNS), "IP: %s", ip);
+        ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::DNS), "Rewrite took %lu ms", rewriteMs);
         enqueueDnsLog(false, dom.c_str(), false, rewriteMs, 0, ip);
         return ip;
     }
@@ -147,9 +144,8 @@ IPAddress handleDNSRequest(String dom)
     if (isCached(dom.c_str(), ip))
     {
         uint32_t cacheLookupMs = millis() - oMillis;
-        Serial.print(" | IP:");
-        Serial.print(ip);
-        Serial.printf("\nFind in cache took %lu ms\n", cacheLookupMs);
+        ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::DNS), "IP: %s", ip);
+        ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::DNS), "Find in cache took %lu ms", cacheLookupMs);
         enqueueDnsLog(ip == IPAddress(0, 0, 0, 0), dom.c_str(), false, cacheLookupMs, 0, ip);
         return ip;
     }
@@ -163,7 +159,7 @@ IPAddress handleDNSRequest(String dom)
     uint32_t processMs = millis() - oMillis;
     if (isBlock)
     {
-        Serial.printf(" Blocked | Find took %lu ms\n", processMs);
+        ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::DNS), "Blocked | Find took %lu ms", processMs);
         enqueueDnsLog(true, dom.c_str(), false, processMs, 0);
         return IPAddress(0, 0, 0, 0);
     }

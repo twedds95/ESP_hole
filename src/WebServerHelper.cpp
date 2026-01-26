@@ -8,6 +8,15 @@ unsigned long lastPersistedTick = 0;
 Preferences prefs;
 PersistedStats stats;
 
+#define totalQueries stats._totalQueries
+#define totalBlocked stats._totalBlocked
+#define totalResponseTime stats._responseTime
+#define totalAddedTime stats._processTime
+#define hourly stats._hourly
+#define currentHour stats._currentHour
+#define topBlocked stats._topBlocked
+#define topQueried stats._topQueried
+
 struct ListDef
 {
   const char *name;
@@ -23,6 +32,7 @@ const int LIST_COUNT = sizeof(lists) / sizeof(lists[0]);
 
 void savePersistedStats()
 {
+  ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::STATS), "Persisting Data");
   prefs.begin(STATS_SAVE_ID, false);
   prefs.putBytes(STATS_SAVE_KEY, &stats, sizeof(stats));
   prefs.end();
@@ -30,20 +40,24 @@ void savePersistedStats()
 
 void loadPersistedStats()
 {
+  
+  ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::STATS), "Loading Persisted Data");
   prefs.begin(STATS_SAVE_ID, true);
 
   if (prefs.isKey(STATS_SAVE_KEY))
   {
+    ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::STATS), "Persisted Data: Found Key");
     prefs.getBytes(STATS_SAVE_KEY, &stats, sizeof(stats));
-
     if (stats.version != STATS_VERSION)
     {
+      ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::STATS), "Persisted Data: New Version");
       memset(&stats, 0, sizeof(stats));
       stats.version = STATS_VERSION;
     }
   }
   else
   {
+    ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::STATS), "Persisted Data: Initializing New");
     memset(&stats, 0, sizeof(stats));
     stats.version = STATS_VERSION;
   }
@@ -253,6 +267,16 @@ void handleListUpdates()
   handleLists();
 }
 
+const DomainStat* getTopBlocked()
+{
+    return topBlocked;
+}
+
+const DomainStat* getTopQueried()
+{
+    return topQueried;
+}
+
 void setupServerHelper()
 {
   loadPersistedStats();
@@ -262,8 +286,7 @@ void setupServerHelper()
   handleListUpdates();
 
   server.begin();
-  Serial.println("ESP_hole Dashboard started on:");
-  Serial.println(WiFi.localIP());
+  ESP_LOGI(LOG_TAG(ESPHOLE_LOGTYPES::WIFI), "ESP_hole Dashboard started on: %s", WiFi.localIP());
 }
 
 void handleTimeSensitiveRotations()
@@ -373,8 +396,7 @@ String getJsonStats()
 
   json += "}";
 
-  Serial.println("Sending JSON to Dashboard:");
-  Serial.println(json);
+  ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::STATS), "Sending JSON to Dashboard: %s", json);
 
   return json;
 }

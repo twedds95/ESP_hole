@@ -27,7 +27,7 @@ bool addRewriteRule(const char *domain, const char *ipStr)
     File f = SPIFFS.open("/rewrite", FILE_APPEND);
     if (!f)
     {
-        Serial.println("ERROR: Failed to open rewrite file");
+        ESP_LOGE(LOG_TAG(ESPHOLE_LOGTYPES::SPIFFS), "ERROR: Failed to open rewrite file");
         return false;
     }
 
@@ -63,7 +63,7 @@ bool addListEntry(const String &entry, const char* fName, std::vector<String> &l
     File f = SPIFFS.open(fName, FILE_APPEND);
     if (!f)
     {
-        Serial.printf("ERROR: Failed to open %s file\n", fName);
+        ESP_LOGE(LOG_TAG(ESPHOLE_LOGTYPES::SPIFFS), "ERROR: Failed to open %s file\n", fName);
         return false;
     }
 
@@ -89,14 +89,14 @@ bool removeListEntry(const String &entry, const char* fName, std::vector<String>
 
     if (!found)
     {
-        Serial.printf("INFO: Entry '%s' not found in list\n", entry.c_str());
+        ESP_LOGE(LOG_TAG(ESPHOLE_LOGTYPES::CODE), "INFO: Entry '%s' not found in list\n", entry.c_str());
         return false;
     }
 
     File f = SPIFFS.open(fName, FILE_WRITE);
     if (!f)
     {
-        Serial.printf("ERROR: Failed to rewrite %s\n", fName);
+        ESP_LOGE(LOG_TAG(ESPHOLE_LOGTYPES::SPIFFS), "ERROR: Failed to rewrite %s\n", fName);
         return false;
     }
 

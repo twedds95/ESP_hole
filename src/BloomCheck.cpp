@@ -40,10 +40,10 @@ void setupBloom()
     bloomFile = SPIFFS.open("/bloom.bin", "r");
     if (!bloomFile)
     {
-        Serial.println("Bloom filter not found!");
+        ESP_LOGE(LOG_TAG(ESPHOLE_LOGTYPES::BLOOM), "Bloom filter not found!");
     }
     else
     {
-        Serial.println("Bloom filter loaded");
+        ESP_LOGI(LOG_TAG(ESPHOLE_LOGTYPES::BLOOM), "Bloom filter loaded");
     }
 }

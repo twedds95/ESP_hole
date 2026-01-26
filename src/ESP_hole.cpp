@@ -10,6 +10,7 @@
 #include <DNSHelper.h>
 #include <DNSOverrideLists.h>
 #include <DNSServer.h>
+#include <EspLogs.h>
 #include <WebServerHelper.h>
 
 // Edit these to match your preference
@@ -33,20 +34,19 @@ void setup()
         Serial.println("SPIFFS mounted successfully");
     }
 
+    setupLogs(ESP_LOG_INFO); // change if debug needed
+
     dnsServer.setErrorReplyCode(DNSReplyCode::ServerFailure);
     bool dns_running = dnsServer.start(DNS_PORT, "*", WiFi.localIP());
     if (!dns_running)
     {
-        Serial.println("Error: DNS Server not running");
+        ESP_LOGE(LOG_TAG(ESPHOLE_LOGTYPES::DNS), "Error: DNS Server not running");
         return;
     }
 
     setupBloom();
     setupDNSHelper();
-    Serial.println("DNS Server ready");
-    Serial.println("Upstream DNSs:");
-    Serial.println(WiFi.dnsIP(0));
-    Serial.println(WiFi.dnsIP(1));
+    ESP_LOGI(LOG_TAG(ESPHOLE_LOGTYPES::DNS), "Upstream DNSs: %s, %s", WiFi.dnsIP(0), WiFi.dnsIP(1));
 
     setupDNSLists();
     setupServerHelper();
@@ -55,33 +55,29 @@ void setup()
 void setupWifi()
 {
     delay(10);
-    Serial.println();
-    Serial.print("Connecting to: ");
     WiFiManager wm;
     bool res;
     res = wm.autoConnect("AutoConnectAP_ESPHOLE", "ESP32_Connect"); // password protected ap
 
     if (!res)
     {
-        Serial.println("Failed to connect");
+        ESP_LOGE(LOG_TAG(ESPHOLE_LOGTYPES::WIFI), "Failed to connect to WiFi");
     }
     else
     {
         // if you get here you have connected to the WiFi
-        Serial.println("Connected! :)");
+        ESP_LOGI(LOG_TAG(ESPHOLE_LOGTYPES::WIFI), "Connected to WiFi! :)");
         String wifi_ssid = wm.getWiFiSSID();
         String wifi_password = wm.getWiFiPass();
 
-        Serial.println(wifi_ssid);
+        ESP_LOGI(LOG_TAG(ESPHOLE_LOGTYPES::WIFI), "WiFi SSID: %s", wifi_ssid);
         WiFi.begin(wifi_ssid, wifi_password);
         while (WiFi.status() != WL_CONNECTED)
         {
             delay(500);
-            Serial.print(".");
         }
-        Serial.println("");
-        Serial.print("WiFi connected | IP address: ");
-        Serial.println(WiFi.localIP());
+
+        ESP_LOGI(LOG_TAG(ESPHOLE_LOGTYPES::WIFI), "WiFi connected | IP address: %s", WiFi.localIP());
         WiFi.setTxPower(WiFiTxPower);
         // update upstream DNS
         WiFi.config(WiFi.localIP(), WiFi.gatewayIP(), WiFi.subnetMask(), primaryDNS, secondaryDNS);        
