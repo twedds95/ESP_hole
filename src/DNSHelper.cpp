@@ -100,19 +100,19 @@ bool isCached(const char *domain, IPAddress &ip)
     return false;
 }
 
-IPAddress sendUpstream(const char *dom, IPAddress &ip, uint32_t processMs, String logMsg)
+IPAddress sendUpstream(const char *dom, IPAddress &ip, uint32_t processMs, String &logMsg)
 {
     uint32_t oMillis = millis();
     WiFi.hostByName(dom, ip);
     uint32_t resolvMs = millis() - oMillis;
     if (ip == IPAddress(0, 0, 0, 0))
     {
-        logMsg += "Block by upstream took %lu ms | Find took %lu ms";
+        logMsg += "Block by upstream took %lu ms";
         enqueueDnsLog(true, dom, true, resolvMs, processMs, logMsg);
     }
     else
     {
-        logMsg += "Resolv took %lu ms | Find took %lu ms";
+        logMsg += "Resolve took %lu ms";
         enqueueDnsLog(false, dom, true, resolvMs, processMs, logMsg, ip);
     }
 
@@ -199,9 +199,12 @@ void statsTask(void *arg)
 
             if (ev.wasSentUpstream)
             {
+                char buffer[MAX_LOG_MSG_LEN];
+                strncpy(buffer, ev.logMsg, sizeof(buffer) - 1);
+                strncat(buffer, " | Bloom check took %lu ms", sizeof(buffer) - strlen(buffer) - 1);
                 dualPrintLogf(ESPHOLE_LOGLEVEL::INFO,
                               ESPHOLE_LOGTYPES::DNS,
-                              ev.logMsg.c_str(),
+                              buffer,
                               ev.domain,
                               ev.ip.toString().c_str(),
                               ev.resolveMs,
@@ -211,7 +214,7 @@ void statsTask(void *arg)
             {
                 dualPrintLogf(ESPHOLE_LOGLEVEL::INFO,
                               ESPHOLE_LOGTYPES::DNS,
-                              ev.logMsg.c_str(),
+                              ev.logMsg,
                               ev.domain,
                               ev.ip.toString().c_str(),
                               ev.processMs);
@@ -238,7 +241,7 @@ void enqueueDnsLog(bool blocked,
     ev.wasSentUpstream = wasSentUpstream;
     ev.ip = ip;
     strncpy(ev.domain, domain, MAX_DOMAIN_LEN - 1);
-    ev.logMsg = logMsg;
+    strncpy(ev.logMsg, logMsg.c_str(), MAX_LOG_MSG_LEN - 1);
 
     // Do NOT block DNS if queue is full
     xQueueSend(dnsLogQueue, &ev, 0);

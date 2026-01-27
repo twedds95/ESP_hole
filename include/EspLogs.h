@@ -7,6 +7,7 @@
 
 #define logName "/esplogs"
 #define MAX_LOGS 3
+#define MAX_LOG_MSG_LEN 256
 
 static const char* const LOG_TAGS[] PROGMEM = {
     "DNS", "WIFI", "BLOOM", "SPIFFS", "STATS", "CODE"

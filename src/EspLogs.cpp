@@ -2,23 +2,21 @@
 
 static File logFile;
 static uint32_t lastFlush = 0;
-ESPHOLE_LOGLEVEL LOG_LEVEL = ESPHOLE_LOGLEVEL::INFO; //default
+ESPHOLE_LOGLEVEL LOG_LEVEL = ESPHOLE_LOGLEVEL::INFO; // default
 
 void dualPrintLogf(ESPHOLE_LOGLEVEL logLevel, ESPHOLE_LOGTYPES tagEnum, const char *fmt, ...)
 {
-    if (logLevel > LOG_LEVEL) return;
+    if (logLevel > LOG_LEVEL)
+        return;
 
     const char *tag = LOG_TAG(tagEnum);
-    char msg[256];
-    char buf[300];
-    
-    va_list arg;
-    va_list copy;
-    va_start(arg, fmt);
-    va_copy(copy, arg);
+    char msg[MAX_LOG_MSG_LEN];
+    char buf[MAX_LOG_MSG_LEN + 64];
 
-    int msg_len = vsnprintf(msg, sizeof(msg), fmt, copy);
-    va_end(copy);
+    va_list arg;
+    va_start(arg, fmt);
+    int msg_len = vsnprintf(msg, sizeof(msg), fmt, arg);
+    va_end(arg);
     if (msg_len <= 0)
         return;
 
@@ -37,7 +35,7 @@ void dualPrintLogf(ESPHOLE_LOGLEVEL logLevel, ESPHOLE_LOGTYPES tagEnum, const ch
 
     if (logFile.size() > 64 * 1024)
     { // 64 KB
-        rollLog(); 
+        rollLog();
     }
 
     // File output
@@ -52,14 +50,18 @@ void dualPrintLogf(ESPHOLE_LOGLEVEL logLevel, ESPHOLE_LOGTYPES tagEnum, const ch
     }
 }
 
-void rollLog() {
+void rollLog()
+{
     String oldest = String(logName) + String(MAX_LOGS - 1);
-    if (SPIFFS.exists(oldest)) SPIFFS.remove(oldest);
+    if (SPIFFS.exists(oldest))
+        SPIFFS.remove(oldest);
 
-    for (int i = MAX_LOGS - 2; i >= 0; i--) {
+    for (int i = MAX_LOGS - 2; i >= 0; i--)
+    {
         String oldName = String(logName) + String(i);
         String newName = String(logName) + String(i + 1);
-        if (SPIFFS.exists(oldName)) SPIFFS.rename(oldName, newName);
+        if (SPIFFS.exists(oldName))
+            SPIFFS.rename(oldName, newName);
     }
 
     String newLog = String(logName);
