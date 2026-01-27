@@ -141,13 +141,22 @@
         z-index: 1000;
       }
 
-      .menu-content div {
-        padding: 10px;
+      .menu-item {
+        padding: 12px 16px;
         cursor: pointer;
+        font-size: 15px;
+        color: #eee;
+        white-space: nowrap;
       }
 
-      .menu-content div:hover {
+      .menu-item:hover {
         background: #333;
+      }
+
+      .menu-divider {
+        height: 1px;
+        background: #444;
+        margin: 6px 0;
       }
 
       .overlay {
@@ -191,9 +200,11 @@
     </div>
     <div class="menu">
       <div id="menu" class="menu-content">
-        <div onclick="openEditor('rewrite')">Edit Rewrite</div>
-        <div onclick="openEditor('blocklist')">Edit Block List</div>
-        <div onclick="openEditor('whitelist')">Edit Whitelist</div>
+        <div class="menu-item" onclick="openEditor('rewrite')">✏️ Edit Rewrite</div>
+        <div class="menu-item" onclick="openEditor('blocklist')">⛔ Edit Block List</div>
+        <div class="menu-item" onclick="openEditor('whitelist')">✅ Edit Whitelist</div>
+        <div class="menu-divider"></div>
+        <div class="menu-item logs" onclick="openLogs()">📜 View Logs</div>
       </div>
     </div>
 
@@ -259,8 +270,8 @@
           <textarea id="editorArea"></textarea>
 
           <div class="editorButtons">
-            <button onclick="applyEditor()">OK</button>
-            <button onclick="closeEditor()">Cancel</button>
+            <button id="editorOk" onclick="applyEditor()">OK</button>
+            <button id="editorCancel" onclick="closeEditor()">Cancel</button>
           </div>
         </div>
       </div>
@@ -598,6 +609,29 @@
       let currentEdit = null;
       let cachedLists = {};
 
+      async function openLogs() {
+        currentEdit = "logs";
+        editorOverlay.style.display = 'block';
+
+        editorTitle.textContent = "ESP Logs";
+        editorArea.readOnly = true;
+        editorArea.value = "Loading logs...";
+
+        document.getElementById("editorOk").style.display = "none";
+        document.getElementById("editorCancel").textContent = "Close";
+
+        try {
+          const res = await fetch("/logs", { cache: "no-store" });
+          editorArea.value = res.ok
+            ? await res.text()
+            : "Failed to load logs";
+        } catch (e) {
+          editorArea.value = "Error loading logs";
+        }
+
+        editorArea.scrollTop = editorArea.scrollHeight;
+      }
+
       async function openEditor(type) {
         currentEdit = type;
         menu.style.display = 'none';
@@ -610,6 +644,7 @@
             : type === 'blocklist' ? 'Edit Block List'
               : 'Edit Whitelist';
 
+        editorArea.readOnly = false;
         editorArea.value = data.trim();
         editorOverlay.style.display = 'block';
 
@@ -620,6 +655,7 @@
             .map(x => x.trim())
             .filter(Boolean);
         }
+        document.getElementById("editorOk").style.display = "inline-block";
       }
 
       async function applyEditor() {
@@ -687,6 +723,10 @@
 
       function closeEditor() {
         editorOverlay.style.display = 'none';
+        editorArea.readOnly = false;
+        editorArea.value = "";
+        document.getElementById("editorOk").style.display = "inline-block";
+        document.getElementById("editorCancel").textContent = "Cancel";
         currentEdit = null;
       }
 

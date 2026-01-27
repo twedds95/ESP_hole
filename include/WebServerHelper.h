@@ -11,16 +11,10 @@
 #define HOURS 24
 // track more domains but only show top 10 in Dashboard
 #define TOP_N 10
-#define TOP_N_TRACKED 50
+#define TOP_N_TRACKED 40 // tracking more causes issues with persistence
 #define MAX_DOMAIN_LEN 48
+#define MAX_IP_LEN 16
 
-struct DomainStat
-{
-  char domain[MAX_DOMAIN_LEN];
-  uint32_t count;
-  bool wasSentUpstream;
-  IPAddress ip;
-};
 
 struct DnsLogEvent
 {
@@ -34,9 +28,20 @@ struct DnsLogEvent
 
 // #Persisted Stats
 #include <Preferences.h>
-#define STATS_VERSION 2
+#define STATS_VERSION 1 //max 255
 #define STATS_SAVE_ID "esp_hole"
 #define STATS_SAVE_KEY "stats"
+#define HOUR_SAVE_KEY "hourly"
+#define BLOCKS_SAVE_KEY "top_blk"
+#define QUERIES_SAVE_KEY "top_qry"
+
+struct DomainStat
+{
+  char domain[MAX_DOMAIN_LEN];
+  uint32_t count;
+  bool wasSentUpstream;
+  char ip[MAX_IP_LEN];
+};
 
 struct HourStats
 {
@@ -53,14 +58,12 @@ struct PersistedStats
   uint32_t _totalBlocked;
   uint64_t _responseTime;
   uint64_t _processTime;
-  HourStats _hourly[HOURS];
   uint8_t _currentHour;
-  DomainStat _topBlocked[TOP_N_TRACKED];
-  DomainStat _topQueried[TOP_N_TRACKED];
 };
 
 void handleRoot();
 void handleStats();
+void handleLogs();
 void emptyRequestHandler(AsyncWebServerRequest * request);
 void handleLists();
 const char *getListPath(const String &name);

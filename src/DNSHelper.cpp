@@ -79,7 +79,10 @@ bool isCached(const char *domain, IPAddress &ip)
     {
         if (topQueried[i].count && strcmp(topQueried[i].domain, domain) == 0)
         {
-            ip = topQueried[i].ip;
+            if (!ip.fromString(topQueried[i].ip))
+            {
+                return false;
+            }
             return true;
         }
     }  
@@ -102,15 +105,15 @@ IPAddress sendUpstream(const char *dom, IPAddress &ip, uint32_t processMs)
     uint32_t oMillis = millis();
     WiFi.hostByName(dom, ip);
     uint32_t resolvMs = millis() - oMillis;
-    ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::DNS), "IP: %s", ip);
+    dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::DNS, "IP: %s", ip.toString().c_str());
     if (ip == IPAddress(0, 0, 0, 0))
     {
-        ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::DNS), "Block by upstream took %lu ms | Find took %lu ms", resolvMs, processMs);
+        dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::DNS, "Block by upstream took %lu ms | Find took %lu ms", resolvMs, processMs);
         enqueueDnsLog(true, dom, true, resolvMs, processMs);
     }
     else
     {
-        ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::DNS), "Resolv took %lu ms | Find took %lu ms", resolvMs, processMs);
+        dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::DNS, "Resolv took %lu ms | Find took %lu ms", resolvMs, processMs);
         enqueueDnsLog(false, dom, true, resolvMs, processMs, ip);
     }
 
@@ -129,14 +132,14 @@ IPAddress handleDNSRequest(String dom)
         return IPAddress(0, 0, 0, 0);
     }
 
-    ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::DNS), "Domain: %s", dom);
+    dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::DNS, "Domain: %s", dom.c_str());
     IPAddress ip;
     uint32_t oMillis = millis();
     if (isRewrite(dom.c_str(), ip))
     {
         uint32_t rewriteMs = millis() - oMillis;
-        ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::DNS), "IP: %s", ip);
-        ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::DNS), "Rewrite took %lu ms", rewriteMs);
+        dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::DNS, "IP: %s", ip.toString().c_str());
+        dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::DNS, "Rewrite took %lu ms", rewriteMs);
         enqueueDnsLog(false, dom.c_str(), false, rewriteMs, 0, ip);
         return ip;
     }
@@ -144,8 +147,8 @@ IPAddress handleDNSRequest(String dom)
     if (isCached(dom.c_str(), ip))
     {
         uint32_t cacheLookupMs = millis() - oMillis;
-        ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::DNS), "IP: %s", ip);
-        ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::DNS), "Find in cache took %lu ms", cacheLookupMs);
+        dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::DNS, "IP: %s", ip.toString().c_str());
+        dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::DNS, "Find in cache took %lu ms", cacheLookupMs);
         enqueueDnsLog(ip == IPAddress(0, 0, 0, 0), dom.c_str(), false, cacheLookupMs, 0, ip);
         return ip;
     }
@@ -159,7 +162,7 @@ IPAddress handleDNSRequest(String dom)
     uint32_t processMs = millis() - oMillis;
     if (isBlock)
     {
-        ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::DNS), "Blocked | Find took %lu ms", processMs);
+        dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::DNS, "Blocked | Find took %lu ms", processMs);
         enqueueDnsLog(true, dom.c_str(), false, processMs, 0);
         return IPAddress(0, 0, 0, 0);
     }

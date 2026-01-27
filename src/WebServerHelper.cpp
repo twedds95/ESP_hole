@@ -12,10 +12,11 @@ PersistedStats stats;
 #define totalBlocked stats._totalBlocked
 #define totalResponseTime stats._responseTime
 #define totalAddedTime stats._processTime
-#define hourly stats._hourly
 #define currentHour stats._currentHour
-#define topBlocked stats._topBlocked
-#define topQueried stats._topQueried
+
+HourStats hourly[HOURS];
+DomainStat topBlocked[TOP_N_TRACKED];
+DomainStat topQueried[TOP_N_TRACKED];
 
 struct ListDef
 {
@@ -32,35 +33,65 @@ const int LIST_COUNT = sizeof(lists) / sizeof(lists[0]);
 
 void savePersistedStats()
 {
-  ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::STATS), "Persisting Data");
+  dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
+                ESPHOLE_LOGTYPES::STATS,
+                "Size of data to persist = %u\n",
+                sizeof(stats) + sizeof(hourly) + sizeof(topBlocked) + sizeof(topQueried));
   prefs.begin(STATS_SAVE_ID, false);
-  prefs.putBytes(STATS_SAVE_KEY, &stats, sizeof(stats));
+  size_t written = 0;
+  written += prefs.putBytes(STATS_SAVE_KEY, &stats, sizeof(stats));
+  written += prefs.putBytes(HOUR_SAVE_KEY, hourly, sizeof(hourly));
+  written += prefs.putBytes(BLOCKS_SAVE_KEY, topBlocked, sizeof(topBlocked));
+  written += prefs.putBytes(QUERIES_SAVE_KEY, topQueried, sizeof(topQueried));
   prefs.end();
+  dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
+                ESPHOLE_LOGTYPES::STATS,
+                "Version %d - Persisted %u bytes (stats=%u hourly=%u blocks=%u queries=%u)",
+                STATS_VERSION,
+                written,
+                sizeof(stats),
+                sizeof(hourly),
+                sizeof(topBlocked),
+                sizeof(topQueried));
 }
 
 void loadPersistedStats()
 {
-  
-  ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::STATS), "Loading Persisted Data");
+  dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
+                ESPHOLE_LOGTYPES::STATS,
+                "Loading Persisted Data");
   prefs.begin(STATS_SAVE_ID, true);
-
-  if (prefs.isKey(STATS_SAVE_KEY))
+  if (!prefs.isKey(STATS_SAVE_KEY))
   {
-    ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::STATS), "Persisted Data: Found Key");
-    prefs.getBytes(STATS_SAVE_KEY, &stats, sizeof(stats));
-    if (stats.version != STATS_VERSION)
-    {
-      ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::STATS), "Persisted Data: New Version");
-      memset(&stats, 0, sizeof(stats));
-      stats.version = STATS_VERSION;
-    }
-  }
-  else
-  {
-    ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::STATS), "Persisted Data: Initializing New");
+    dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
+                  ESPHOLE_LOGTYPES::STATS,
+                  "Persisted Data: No Key - Initializing New");
     memset(&stats, 0, sizeof(stats));
     stats.version = STATS_VERSION;
+    prefs.end();
+    savePersistedStats();
+    return;
   }
+
+  prefs.getBytes(STATS_SAVE_KEY, &stats, sizeof(stats));
+  if (stats.version != STATS_VERSION)
+  {
+    dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
+                  ESPHOLE_LOGTYPES::STATS,
+                  "Persisted Data: New Version %d, Old Version: %d",
+                  STATS_VERSION,
+                  stats.version);
+    memset(&stats, 0, sizeof(stats));
+    stats.version = STATS_VERSION;
+    prefs.clear();
+    prefs.end();
+    savePersistedStats();
+    return;
+  }
+
+  prefs.getBytes(HOUR_SAVE_KEY, hourly, sizeof(hourly));
+  prefs.getBytes(BLOCKS_SAVE_KEY, topBlocked, sizeof(topBlocked));
+  prefs.getBytes(QUERIES_SAVE_KEY, topQueried, sizeof(topQueried));
 
   prefs.end();
 }
@@ -75,6 +106,19 @@ void handleStats()
 {
   server.on("/stats", HTTP_GET, [](AsyncWebServerRequest *request)
             { request->send(200, "application/json", getJsonStats()); });
+}
+
+void handleLogs()
+{
+  server.on("/logs", HTTP_GET, [](AsyncWebServerRequest *req)
+            {
+    if (!SPIFFS.exists("/esplogs")) {
+        req->send(200, "text/plain", "");
+        return;
+    }
+
+    File f = SPIFFS.open("/esplogs", "r");
+    req->send(f, "text/plain"); });
 }
 
 void emptyRequestHandler(AsyncWebServerRequest *request) {};
@@ -267,14 +311,14 @@ void handleListUpdates()
   handleLists();
 }
 
-const DomainStat* getTopBlocked()
+const DomainStat *getTopBlocked()
 {
-    return topBlocked;
+  return topBlocked;
 }
 
-const DomainStat* getTopQueried()
+const DomainStat *getTopQueried()
 {
-    return topQueried;
+  return topQueried;
 }
 
 void setupServerHelper()
@@ -283,10 +327,14 @@ void setupServerHelper()
 
   handleRoot();
   handleStats();
+  handleLogs();
   handleListUpdates();
 
   server.begin();
-  ESP_LOGI(LOG_TAG(ESPHOLE_LOGTYPES::WIFI), "ESP_hole Dashboard started on: %s", WiFi.localIP());
+  dualPrintLogf(ESPHOLE_LOGLEVEL::INFO,
+                ESPHOLE_LOGTYPES::WIFI,
+                "ESP_hole Dashboard started on: %s",
+                WiFi.localIP().toString().c_str());
 }
 
 void handleTimeSensitiveRotations()
@@ -396,7 +444,10 @@ String getJsonStats()
 
   json += "}";
 
-  ESP_LOGD(LOG_TAG(ESPHOLE_LOGTYPES::STATS), "Sending JSON to Dashboard: %s", json);
+  dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
+                ESPHOLE_LOGTYPES::STATS,
+                "Sending JSON to Dashboard: %s",
+                json.c_str());
 
   return json;
 }
@@ -471,7 +522,7 @@ void updateTop(DomainStat arr[], const char *dom, bool wasSentUpstream, IPAddres
       strncpy(arr[i].domain, domain, MAX_DOMAIN_LEN);
       arr[i].count = 1;
       arr[i].wasSentUpstream = wasSentUpstream;
-      arr[i].ip = ip;
+      strncpy(arr[i].ip, ip.toString().c_str(), MAX_IP_LEN);
       return;
     }
   }
@@ -487,7 +538,7 @@ void updateTop(DomainStat arr[], const char *dom, bool wasSentUpstream, IPAddres
   strncpy(arr[minIdx].domain, domain, MAX_DOMAIN_LEN);
   arr[minIdx].count = 1;
   arr[minIdx].wasSentUpstream = wasSentUpstream;
-  arr[minIdx].ip = ip;
+  strncpy(arr[minIdx].ip, ip.toString().c_str(), MAX_IP_LEN);
 }
 
 void removeFromTopList(DomainStat arr[], const char *dom)
@@ -502,7 +553,7 @@ void removeFromTopList(DomainStat arr[], const char *dom)
       strncpy(arr[i].domain, "", MAX_DOMAIN_LEN);
       arr[i].count = 0;
       arr[i].wasSentUpstream = true;
-      arr[i].ip = IPAddress(0, 0, 0, 0);
+      strncpy(arr[i].ip, (IPAddress(0, 0, 0, 0)).toString().c_str(), MAX_IP_LEN);
       return;
     }
   }

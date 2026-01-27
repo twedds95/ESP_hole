@@ -27,7 +27,7 @@ bool addRewriteRule(const char *domain, const char *ipStr)
     File f = SPIFFS.open("/rewrite", FILE_APPEND);
     if (!f)
     {
-        ESP_LOGE(LOG_TAG(ESPHOLE_LOGTYPES::SPIFFS), "ERROR: Failed to open rewrite file");
+        dualPrintLogf(ESPHOLE_LOGLEVEL::ERROR, ESPHOLE_LOGTYPES::SPIFFS, "Failed to open rewrite file");
         return false;
     }
 
@@ -63,7 +63,7 @@ bool addListEntry(const String &entry, const char* fName, std::vector<String> &l
     File f = SPIFFS.open(fName, FILE_APPEND);
     if (!f)
     {
-        ESP_LOGE(LOG_TAG(ESPHOLE_LOGTYPES::SPIFFS), "ERROR: Failed to open %s file\n", fName);
+        dualPrintLogf(ESPHOLE_LOGLEVEL::ERROR, ESPHOLE_LOGTYPES::SPIFFS, "Failed to open %s file\n", fName);
         return false;
     }
 
@@ -89,14 +89,14 @@ bool removeListEntry(const String &entry, const char* fName, std::vector<String>
 
     if (!found)
     {
-        ESP_LOGE(LOG_TAG(ESPHOLE_LOGTYPES::CODE), "INFO: Entry '%s' not found in list\n", entry.c_str());
+        dualPrintLogf(ESPHOLE_LOGLEVEL::ERROR, ESPHOLE_LOGTYPES::CODE, "Entry '%s' not found in list\n", entry.c_str());
         return false;
     }
 
     File f = SPIFFS.open(fName, FILE_WRITE);
     if (!f)
     {
-        ESP_LOGE(LOG_TAG(ESPHOLE_LOGTYPES::SPIFFS), "ERROR: Failed to rewrite %s\n", fName);
+        dualPrintLogf(ESPHOLE_LOGLEVEL::ERROR, ESPHOLE_LOGTYPES::SPIFFS, "Failed to rewrite %s\n", fName);
         return false;
     }
 

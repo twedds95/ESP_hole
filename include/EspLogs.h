@@ -3,9 +3,14 @@
 
 #include <Arduino.h>
 #include <SPIFFS.h>
+#include <stdarg.h>
 
 static const char* const LOG_TAGS[] PROGMEM = {
     "DNS", "WIFI", "BLOOM", "SPIFFS", "STATS", "CODE"
+};
+
+static const char* const LOG_LVLS[] PROGMEM = {
+    "ERROR", "INFO", "DEBUG",
 };
 
 enum class ESPHOLE_LOGTYPES : uint8_t
@@ -18,8 +23,17 @@ enum class ESPHOLE_LOGTYPES : uint8_t
   CODE,  
 };
 
-#define LOG_TAG(tag) LOG_TAGS[(uint8_t)(tag)]
+enum class ESPHOLE_LOGLEVEL : uint8_t
+{
+  ERROR = 0,
+  INFO,
+  DEBUG,
+};
 
-void setupLogs(esp_log_level_t level);
+#define LOG_TAG(tag) LOG_TAGS[(uint8_t)(tag)]
+#define LOG_LVL(lvl) LOG_LVLS[(uint8_t)(lvl)]
+
+void dualPrintLogf(ESPHOLE_LOGLEVEL logLevel, ESPHOLE_LOGTYPES tagEnum, const char *fmt, ...);
+void setupLogs(ESPHOLE_LOGLEVEL lvl);
 
 #endif //ESPLOGS_H

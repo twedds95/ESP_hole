@@ -34,19 +34,19 @@ void setup()
         Serial.println("SPIFFS mounted successfully");
     }
 
-    setupLogs(ESP_LOG_INFO); // change if debug needed
+    setupLogs(ESPHOLE_LOGLEVEL::INFO);
 
     dnsServer.setErrorReplyCode(DNSReplyCode::ServerFailure);
     bool dns_running = dnsServer.start(DNS_PORT, "*", WiFi.localIP());
     if (!dns_running)
     {
-        ESP_LOGE(LOG_TAG(ESPHOLE_LOGTYPES::DNS), "Error: DNS Server not running");
+        dualPrintLogf(ESPHOLE_LOGLEVEL::ERROR, ESPHOLE_LOGTYPES::DNS, "DNS Server not running");
         return;
     }
 
     setupBloom();
     setupDNSHelper();
-    ESP_LOGI(LOG_TAG(ESPHOLE_LOGTYPES::DNS), "Upstream DNSs: %s, %s", WiFi.dnsIP(0), WiFi.dnsIP(1));
+    dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::DNS, "Upstream DNSs: %s, %s", WiFi.dnsIP(0).toString().c_str(), WiFi.dnsIP(1).toString().c_str());
 
     setupDNSLists();
     setupServerHelper();
@@ -61,23 +61,23 @@ void setupWifi()
 
     if (!res)
     {
-        ESP_LOGE(LOG_TAG(ESPHOLE_LOGTYPES::WIFI), "Failed to connect to WiFi");
+        dualPrintLogf(ESPHOLE_LOGLEVEL::ERROR, ESPHOLE_LOGTYPES::WIFI, "Failed to connect to WiFi");
     }
     else
     {
         // if you get here you have connected to the WiFi
-        ESP_LOGI(LOG_TAG(ESPHOLE_LOGTYPES::WIFI), "Connected to WiFi! :)");
+        dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::WIFI, "Connected to WiFi! :)");
         String wifi_ssid = wm.getWiFiSSID();
         String wifi_password = wm.getWiFiPass();
 
-        ESP_LOGI(LOG_TAG(ESPHOLE_LOGTYPES::WIFI), "WiFi SSID: %s", wifi_ssid);
+        dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::WIFI, "WiFi SSID: %s", wifi_ssid.c_str());
         WiFi.begin(wifi_ssid, wifi_password);
         while (WiFi.status() != WL_CONNECTED)
         {
             delay(500);
         }
 
-        ESP_LOGI(LOG_TAG(ESPHOLE_LOGTYPES::WIFI), "WiFi connected | IP address: %s", WiFi.localIP());
+        dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::WIFI, "WiFi connected | IP address: %s", WiFi.localIP().toString().c_str());
         WiFi.setTxPower(WiFiTxPower);
         // update upstream DNS
         WiFi.config(WiFi.localIP(), WiFi.gatewayIP(), WiFi.subnetMask(), primaryDNS, secondaryDNS);        

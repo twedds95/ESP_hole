@@ -1,23 +1,40 @@
 #include <EspLogs.h>
 
-#include <Arduino.h>
-#include "SPIFFS.h"
-#include <stdarg.h>
-
 const char* logName = "/esplogs";
 static File logFile;
 static uint32_t lastFlush = 0;
+ESPHOLE_LOGLEVEL LOG_LEVEL = ESPHOLE_LOGLEVEL::INFO; //default
 
-int dualPrintf(const char *fmt, va_list args)
+void dualPrintLogf(ESPHOLE_LOGLEVEL logLevel, ESPHOLE_LOGTYPES tagEnum, const char *fmt, ...)
 {
-    char buf[256];
+    if (logLevel > LOG_LEVEL) return;
 
-    int len = vsnprintf(buf, sizeof(buf), fmt, args);
+    const char *tag = LOG_TAG(tagEnum);
+    char msg[256];
+    char buf[300];
+    
+    va_list arg;
+    va_list copy;
+    va_start(arg, fmt);
+    va_copy(copy, arg);
+
+    int msg_len = vsnprintf(msg, sizeof(msg), fmt, copy);
+    va_end(copy);
+    if (msg_len <= 0)
+        return;
+
+    int len = snprintf(buf, sizeof(buf), "[%s] %s\n", tag, msg);
     if (len <= 0)
-        return len;
+        return;
 
     // Serial output
     Serial.write((uint8_t *)buf, len);
+
+    if (!logFile)
+    {
+        Serial.println("Logfile not found.");
+        return;
+    }
 
     if (logFile.size() > 64 * 1024)
     { // 64 KB
@@ -36,16 +53,18 @@ int dualPrintf(const char *fmt, va_list args)
             lastFlush = millis();
         }
     }
-
-    return len;
 }
 
-void setupLogs(esp_log_level_t level)
+void setupLogs(ESPHOLE_LOGLEVEL lvl)
 {
-    logFile = SPIFFS.open(logName, FILE_APPEND);
-
-    // Redirect all printf()
-    esp_log_set_vprintf(dualPrintf);
-    esp_log_level_set("*", level);
-    esp_log_level_set(LOG_TAG(ESPHOLE_LOGTYPES::STATS), ESP_LOG_DEBUG);
+    LOG_LEVEL = lvl;
+    logFile = SPIFFS.open(logName, FILE_WRITE);
+    if (!logFile)
+    {
+        Serial.println("Logfile not opened.");
+    }
+    else
+    {
+        dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::CODE, "Loggin Initialized with Log Level: %s", LOG_LVL(lvl));
+    }
 }

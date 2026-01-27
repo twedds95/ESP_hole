@@ -40,10 +40,10 @@ void setupBloom()
     bloomFile = SPIFFS.open("/bloom.bin", "r");
     if (!bloomFile)
     {
-        ESP_LOGE(LOG_TAG(ESPHOLE_LOGTYPES::BLOOM), "Bloom filter not found!");
+        dualPrintLogf(ESPHOLE_LOGLEVEL::ERROR, ESPHOLE_LOGTYPES::BLOOM, "Bloom filter not found!");
     }
     else
     {
-        ESP_LOGI(LOG_TAG(ESPHOLE_LOGTYPES::BLOOM), "Bloom filter loaded");
+        dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG, ESPHOLE_LOGTYPES::BLOOM, "Bloom filter loaded");
     }
 }
