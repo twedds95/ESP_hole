@@ -170,7 +170,7 @@
       .editor {
         background: #111;
         border-radius: 8px;
-        width: min(600px, 90%);
+        width: min(800px, 90%);
         margin: 10vh auto;
         padding: 12px;
       }

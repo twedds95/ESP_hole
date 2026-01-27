@@ -85,14 +85,14 @@ bool isCached(const char *domain, IPAddress &ip)
             }
             return true;
         }
-    }  
-    
+    }
+
     const DomainStat *topBlocked = getTopBlocked();
     for (int i = 0; i < TOP_N_TRACKED; i++)
     {
         if (topBlocked[i].count && strcmp(topBlocked[i].domain, domain) == 0)
         {
-            ip = IPAddress(0,0,0,0);
+            ip = IPAddress(0, 0, 0, 0);
             return true;
         }
     }
@@ -100,21 +100,20 @@ bool isCached(const char *domain, IPAddress &ip)
     return false;
 }
 
-IPAddress sendUpstream(const char *dom, IPAddress &ip, uint32_t processMs)
+IPAddress sendUpstream(const char *dom, IPAddress &ip, uint32_t processMs, String logMsg)
 {
     uint32_t oMillis = millis();
     WiFi.hostByName(dom, ip);
     uint32_t resolvMs = millis() - oMillis;
-    dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::DNS, "IP: %s", ip.toString().c_str());
     if (ip == IPAddress(0, 0, 0, 0))
     {
-        dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::DNS, "Block by upstream took %lu ms | Find took %lu ms", resolvMs, processMs);
-        enqueueDnsLog(true, dom, true, resolvMs, processMs);
+        logMsg += "Block by upstream took %lu ms | Find took %lu ms";
+        enqueueDnsLog(true, dom, true, resolvMs, processMs, logMsg);
     }
     else
     {
-        dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::DNS, "Resolv took %lu ms | Find took %lu ms", resolvMs, processMs);
-        enqueueDnsLog(false, dom, true, resolvMs, processMs, ip);
+        logMsg += "Resolv took %lu ms | Find took %lu ms";
+        enqueueDnsLog(false, dom, true, resolvMs, processMs, logMsg, ip);
     }
 
     return ip;
@@ -132,42 +131,40 @@ IPAddress handleDNSRequest(String dom)
         return IPAddress(0, 0, 0, 0);
     }
 
-    dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::DNS, "Domain: %s", dom.c_str());
+    String logMsg = "Domain: %s | IP: %s | ";
     IPAddress ip;
     uint32_t oMillis = millis();
     if (isRewrite(dom.c_str(), ip))
     {
         uint32_t rewriteMs = millis() - oMillis;
-        dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::DNS, "IP: %s", ip.toString().c_str());
-        dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::DNS, "Rewrite took %lu ms", rewriteMs);
-        enqueueDnsLog(false, dom.c_str(), false, rewriteMs, 0, ip);
+        logMsg += "Rewrite took %lu ms";
+        enqueueDnsLog(false, dom.c_str(), false, rewriteMs, 0, logMsg, ip);
         return ip;
     }
 
     if (isCached(dom.c_str(), ip))
     {
         uint32_t cacheLookupMs = millis() - oMillis;
-        dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::DNS, "IP: %s", ip.toString().c_str());
-        dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::DNS, "Find in cache took %lu ms", cacheLookupMs);
-        enqueueDnsLog(ip == IPAddress(0, 0, 0, 0), dom.c_str(), false, cacheLookupMs, 0, ip);
+        logMsg += "Find in cache took %lu ms";
+        enqueueDnsLog(ip == IPAddress(0, 0, 0, 0), dom.c_str(), false, cacheLookupMs, 0, logMsg, ip);
         return ip;
     }
 
     if (isWhiteListOverride(dom.c_str()))
     {
-        return sendUpstream(dom.c_str(), ip, millis() - oMillis);
+        return sendUpstream(dom.c_str(), ip, millis() - oMillis, logMsg);
     }
 
     bool isBlock = isBlockedOverride(dom.c_str()) || isEasyBlock(dom.c_str()) || bloomCheck(dom.c_str());
     uint32_t processMs = millis() - oMillis;
     if (isBlock)
     {
-        dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::DNS, "Blocked | Find took %lu ms", processMs);
-        enqueueDnsLog(true, dom.c_str(), false, processMs, 0);
+        logMsg += "Blocked | Find took %lu ms";
+        enqueueDnsLog(true, dom.c_str(), false, processMs, 0, logMsg);
         return IPAddress(0, 0, 0, 0);
     }
 
-    return sendUpstream(dom.c_str(), ip, millis() - oMillis);
+    return sendUpstream(dom.c_str(), ip, millis() - oMillis, logMsg);
 }
 
 void setupDNSHelper()
@@ -199,11 +196,37 @@ void statsTask(void *arg)
         if (xQueueReceive(dnsLogQueue, &ev, portMAX_DELAY))
         {
             recordQuery(ev.blocked, ev.domain, ev.wasSentUpstream, ev.resolveMs, ev.processMs, ev.ip);
+
+            if (ev.wasSentUpstream)
+            {
+                dualPrintLogf(ESPHOLE_LOGLEVEL::INFO,
+                              ESPHOLE_LOGTYPES::DNS,
+                              ev.logMsg.c_str(),
+                              ev.domain,
+                              ev.ip.toString().c_str(),
+                              ev.resolveMs,
+                              ev.processMs);
+            }
+            else
+            {
+                dualPrintLogf(ESPHOLE_LOGLEVEL::INFO,
+                              ESPHOLE_LOGTYPES::DNS,
+                              ev.logMsg.c_str(),
+                              ev.domain,
+                              ev.ip.toString().c_str(),
+                              ev.processMs);
+            }
         }
     }
 }
 
-void enqueueDnsLog(bool blocked, const char *domain, bool wasSentUpstream, uint32_t resolvMs, uint32_t processMs, IPAddress ip)
+void enqueueDnsLog(bool blocked,
+                   const char *domain,
+                   bool wasSentUpstream,
+                   uint32_t resolvMs,
+                   uint32_t processMs,
+                   String logMsg,
+                   IPAddress ip)
 {
     if (!dnsLogQueue)
         return;
@@ -215,6 +238,7 @@ void enqueueDnsLog(bool blocked, const char *domain, bool wasSentUpstream, uint3
     ev.wasSentUpstream = wasSentUpstream;
     ev.ip = ip;
     strncpy(ev.domain, domain, MAX_DOMAIN_LEN - 1);
+    ev.logMsg = logMsg;
 
     // Do NOT block DNS if queue is full
     xQueueSend(dnsLogQueue, &ev, 0);

@@ -24,6 +24,7 @@ struct DnsLogEvent
   bool wasSentUpstream;
   char domain[MAX_DOMAIN_LEN];
   IPAddress ip;
+  String logMsg;
 };
 
 // #Persisted Stats
