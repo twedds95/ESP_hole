@@ -1,6 +1,5 @@
 #include <EspLogs.h>
 
-const char* logName = "/esplogs";
 static File logFile;
 static uint32_t lastFlush = 0;
 ESPHOLE_LOGLEVEL LOG_LEVEL = ESPHOLE_LOGLEVEL::INFO; //default
@@ -38,9 +37,7 @@ void dualPrintLogf(ESPHOLE_LOGLEVEL logLevel, ESPHOLE_LOGTYPES tagEnum, const ch
 
     if (logFile.size() > 64 * 1024)
     { // 64 KB
-        logFile.close();
-        SPIFFS.remove(logName);
-        logFile = SPIFFS.open(logName, FILE_APPEND);
+        rollLog(); 
     }
 
     // File output
@@ -55,10 +52,25 @@ void dualPrintLogf(ESPHOLE_LOGLEVEL logLevel, ESPHOLE_LOGTYPES tagEnum, const ch
     }
 }
 
+void rollLog() {
+    String oldest = String(logName) + String(MAX_LOGS - 1);
+    if (SPIFFS.exists(oldest)) SPIFFS.remove(oldest);
+
+    for (int i = MAX_LOGS - 2; i >= 0; i--) {
+        String oldName = String(logName) + String(i);
+        String newName = String(logName) + String(i + 1);
+        if (SPIFFS.exists(oldName)) SPIFFS.rename(oldName, newName);
+    }
+
+    String newLog = String(logName);
+    logFile.close();
+    logFile = SPIFFS.open(newLog, FILE_APPEND);
+}
+
 void setupLogs(ESPHOLE_LOGLEVEL lvl)
 {
     LOG_LEVEL = lvl;
-    logFile = SPIFFS.open(logName, FILE_WRITE);
+    logFile = SPIFFS.open(logName, FILE_APPEND);
     if (!logFile)
     {
         Serial.println("Logfile not opened.");

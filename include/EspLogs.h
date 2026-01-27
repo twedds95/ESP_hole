@@ -5,6 +5,9 @@
 #include <SPIFFS.h>
 #include <stdarg.h>
 
+#define logName "/esplogs"
+#define MAX_LOGS 3
+
 static const char* const LOG_TAGS[] PROGMEM = {
     "DNS", "WIFI", "BLOOM", "SPIFFS", "STATS", "CODE"
 };
@@ -34,6 +37,7 @@ enum class ESPHOLE_LOGLEVEL : uint8_t
 #define LOG_LVL(lvl) LOG_LVLS[(uint8_t)(lvl)]
 
 void dualPrintLogf(ESPHOLE_LOGLEVEL logLevel, ESPHOLE_LOGTYPES tagEnum, const char *fmt, ...);
+void rollLog();
 void setupLogs(ESPHOLE_LOGLEVEL lvl);
 
 #endif //ESPLOGS_H

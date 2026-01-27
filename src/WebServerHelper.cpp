@@ -110,15 +110,28 @@ void handleStats()
 
 void handleLogs()
 {
-  server.on("/logs", HTTP_GET, [](AsyncWebServerRequest *req)
-            {
-    if (!SPIFFS.exists("/esplogs")) {
-        req->send(200, "text/plain", "");
-        return;
+  server.on("/logs", HTTP_GET, [](AsyncWebServerRequest *req){
+    
+    // Use a lambda to stream multiple files sequentially
+    AsyncResponseStream *response = req->beginResponseStream("text/plain");
+
+    for (int i = MAX_LOGS - 1; i >= 0; i--) { // oldest first
+      String fname = String(logName) + (i > 0 ? String(i) : "");
+      if (!SPIFFS.exists(fname)) continue;
+
+      File f = SPIFFS.open(fname, "r");
+      if (!f) continue;
+
+      uint8_t buf[512];
+      size_t readBytes;
+      while ((readBytes = f.read(buf, sizeof(buf))) > 0) {
+        response->write(buf, readBytes); // streams to client directly
+      }
+      f.close();
     }
 
-    File f = SPIFFS.open("/esplogs", "r");
-    req->send(f, "text/plain"); });
+    req->send(response);
+  });
 }
 
 void emptyRequestHandler(AsyncWebServerRequest *request) {};

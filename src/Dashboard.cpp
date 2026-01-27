@@ -175,6 +175,10 @@
         padding: 12px;
       }
 
+      .logEditor {
+        width: 90% !important;
+      }
+
       .editor textarea {
         width: 100%;
         height: 240px;
@@ -265,7 +269,7 @@
       <div>Min Heap: <span id="heapmin">0</span> bytes</div>
 
       <div id="editorOverlay" class="overlay">
-        <div class="editor">
+        <div id="editor" class="editor">
           <h3 id="editorTitle"></h3>
           <textarea id="editorArea"></textarea>
 
@@ -612,6 +616,7 @@
       async function openLogs() {
         currentEdit = "logs";
         editorOverlay.style.display = 'block';
+        editor.classList.add('logEditor');
 
         editorTitle.textContent = "ESP Logs";
         editorArea.readOnly = true;
@@ -722,7 +727,8 @@
       }
 
       function closeEditor() {
-        editorOverlay.style.display = 'none';
+        editorOverlay.style.display = 'none';        
+        editor.classList.remove('logEditor');
         editorArea.readOnly = false;
         editorArea.value = "";
         document.getElementById("editorOk").style.display = "inline-block";
