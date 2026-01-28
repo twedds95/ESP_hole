@@ -37,7 +37,7 @@ bool bloomCheck(const char *domain)
 
 void setupBloom()
 {
-    bloomFile = SPIFFS.open("/bloom.bin", "r");
+    bloomFile = SPIFFS.open("/bloom.bin", FILE_READ);
     if (!bloomFile)
     {
         dualPrintLogf(ESPHOLE_LOGLEVEL::ERROR, ESPHOLE_LOGTYPES::BLOOM, "Bloom filter not found!");

@@ -40,31 +40,33 @@ bool isEasyBlock(const char *domain)
 
 bool isBlockedOverride(const char *domain)
 {
-    for (auto &b : getBlockList())
-    {
-        if (b.equalsIgnoreCase(domain))
-            return true;
-    }
-    return false;
+    auto blockList = getBlockList();
+    return blockList.find(domain) != blockList.end();
 }
 
 bool isWhiteListOverride(const char *domain)
 {
-    for (auto &b : getWhiteList())
-    {
-        if (b.equalsIgnoreCase(domain))
-            return true;
-    }
-    return false;
+    auto whiteList = getWhiteList();
+    return whiteList.find(domain) != whiteList.end();
 }
 
 bool isRewrite(const char *domain, IPAddress &ip)
 {
-    for (auto r : getRewriteRules())
+    auto rewriteRules = getRewriteRules();
+    // try exact match first
+    auto it = rewriteRules.find(domain);
+    if (it != rewriteRules.end())
     {
-        if (strstr(domain, r.domain.c_str()) != nullptr)
+        ip = it->second;
+        return true;
+    }
+
+    // check for partial matches
+    for (auto &r : rewriteRules)
+    {
+        if (strstr(domain, r.first.c_str()) != nullptr)
         {
-            ip = r.ip;
+            ip = r.second;
             return true;
         }
     }
@@ -145,8 +147,13 @@ IPAddress handleDNSRequest(String dom)
     if (isCached(dom.c_str(), ip))
     {
         uint32_t cacheLookupMs = millis() - oMillis;
+        bool isCachedBlocked = ip == IPAddress(0, 0, 0, 0);
+        if (isCachedBlocked)
+        {
+            logMsg += "Blocked | ";
+        }
         logMsg += "Find in cache took %lu ms";
-        enqueueDnsLog(ip == IPAddress(0, 0, 0, 0), dom.c_str(), false, cacheLookupMs, 0, logMsg, ip);
+        enqueueDnsLog(isCachedBlocked, dom.c_str(), false, cacheLookupMs, 0, logMsg, ip);
         return ip;
     }
 

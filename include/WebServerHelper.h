@@ -2,6 +2,8 @@
 #define WEBSERVERHELPER_H
 
 #include <Arduino.h>
+#include <algorithm>
+
 #include <DNSOverrideLists.h>
 #include <ESPAsyncWebServer.h>
 #include <EspLogs.h>
@@ -71,6 +73,7 @@ const char *getListPath(const String &name);
 String getListName(AsyncWebServerRequest *req);
 void handleGetList(AsyncWebServerRequest *req);
 void reloadLists();
+void handleClearList(AsyncWebServerRequest *req);
 void handlePostList(AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t index, size_t total);
 void handleListUpdates();
 const DomainStat* getTopBlocked();
@@ -89,6 +92,8 @@ void sanitizeDomain(const char *dom, char *domain);
 void updateTopBlocked(const char *domain, bool wasSentUpstream);
 void updateTopQueried(const char *domain, bool wasSentUpstream, IPAddress ip);
 void updateTop(DomainStat arr[], const char *dom, bool wasSentUpstream, IPAddress ip = IPAddress(0, 0, 0, 0));
-void removeFromTopList(DomainStat arr[], const char *dom);
+void removeFromTopBlock(const char *dom);
+void removeFromTopQuery(const char *dom);
+bool removeFromTopList(DomainStat arr[], const char *dom);
 
 #endif // WEBSERVERHELPER_H

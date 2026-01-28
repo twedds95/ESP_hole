@@ -1,21 +1,21 @@
 #include <DNSOverrideLists.h>
 
-std::vector<RewriteRule> rewriteRules;
-std::vector<String> whiteList;
-std::vector<String> blockList;
+std::unordered_map<std::string, IPAddress> rewriteRules;
+std::unordered_set<std::string> whiteList;
+std::unordered_set<std::string> blockList;
 
 // Getter functions
-const std::vector<RewriteRule> &getRewriteRules()
+const std::unordered_map<std::string, IPAddress> &getRewriteRules()
 {
     return rewriteRules;
 }
 
-const std::vector<String> &getWhiteList()
+const std::unordered_set<std::string> &getWhiteList()
 {
     return whiteList;
 }
 
-const std::vector<String> &getBlockList()
+const std::unordered_set<std::string> &getBlockList()
 {
     return blockList;
 }
@@ -23,7 +23,6 @@ const std::vector<String> &getBlockList()
 // Add functions
 bool addRewriteRule(const char *domain, const char *ipStr)
 {
-
     File f = SPIFFS.open("/rewrite", FILE_APPEND);
     if (!f)
     {
@@ -42,7 +41,7 @@ bool addRewriteRule(const char *domain, const char *ipStr)
         return false;
     }
 
-    rewriteRules.push_back({domain, ip});
+    rewriteRules[domain] = ip;
     return true;
 }
 
@@ -58,7 +57,7 @@ bool addBlockListEntry(const String &entry)
     return addListEntry(entry, "/blocklist", blockList);
 }
 
-bool addListEntry(const String &entry, const char* fName, std::vector<String> &list)
+bool addListEntry(const String &entry, const char *fName, std::unordered_set<std::string> &list)
 {
     File f = SPIFFS.open(fName, FILE_APPEND);
     if (!f)
@@ -66,22 +65,30 @@ bool addListEntry(const String &entry, const char* fName, std::vector<String> &l
         dualPrintLogf(ESPHOLE_LOGLEVEL::ERROR, ESPHOLE_LOGTYPES::SPIFFS, "Failed to open %s file\n", fName);
         return false;
     }
+    
+    if (f.size() > 0)
+    {
+        f.print("\n");
+    }
+
 
     f.println(entry);
     f.close();
 
-    list.push_back(entry);
+    list.insert(entry.c_str());
     return true;
 }
 
-bool removeListEntry(const String &entry, const char* fName, std::vector<String> &list)
+bool removeListEntry(const String &entry, const char *fName, std::unordered_set<std::string> &list)
 {
     bool found = false;
     for (auto it = list.begin(); it != list.end(); ++it)
     {
-        if (*it == entry)
+        if (*it == entry.c_str())
         {
             list.erase(it);
+            removeFromTopBlock(entry.c_str());
+            removeFromTopQuery(entry.c_str());
             found = true;
             break;
         }
@@ -89,7 +96,7 @@ bool removeListEntry(const String &entry, const char* fName, std::vector<String>
 
     if (!found)
     {
-        dualPrintLogf(ESPHOLE_LOGLEVEL::ERROR, ESPHOLE_LOGTYPES::CODE, "Entry '%s' not found in list\n", entry.c_str());
+        dualPrintLogf(ESPHOLE_LOGLEVEL::ERROR, ESPHOLE_LOGTYPES::CODE, "Entry '%s' not found in list", entry.c_str());
         return false;
     }
 
@@ -102,7 +109,7 @@ bool removeListEntry(const String &entry, const char* fName, std::vector<String>
 
     for (const auto &e : list)
     {
-        f.println(e);
+        f.println(e.c_str());
     }
 
     f.close();
@@ -113,7 +120,7 @@ void setupRewrite()
 {
     rewriteRules.clear();
 
-    File f = SPIFFS.open("/rewrite", "r");
+    File f = SPIFFS.open("/rewrite", FILE_READ);
     if (!f)
         return;
 
@@ -138,7 +145,7 @@ void setupRewrite()
         if (!ip.fromString(ipStr))
             continue;
 
-        rewriteRules.push_back({dom, ip});
+        rewriteRules[dom.c_str()] = ip;
     }
 
     f.close();
@@ -146,9 +153,11 @@ void setupRewrite()
 
 void setupWhiteList()
 {
+    std::unordered_set<std::string> tempList;
+    tempList.reserve(whiteList.size());
+    tempList.insert(whiteList.begin(), whiteList.end());
     whiteList.clear();
-
-    File f = SPIFFS.open("/whitelist", "r");
+    File f = SPIFFS.open("/whitelist", FILE_READ);
     if (!f)
         return;
 
@@ -157,16 +166,27 @@ void setupWhiteList()
         String line = f.readStringUntil('\n');
         line.trim();
         if (line.length() > 0)
-            whiteList.push_back(line);
+        {
+            whiteList.insert(line.c_str());
+            removeFromTopBlock(line.c_str());
+        }
     }
     f.close();
+
+    for (const auto &elem : tempList)
+    {
+        if (!whiteList.count(elem))
+        {
+            removeFromTopQuery(elem.c_str());
+        }
+    }
 }
 
 void setupBlockList()
 {
+    std::unordered_set<std::string> tempList(blockList);
     blockList.clear();
-
-    File f = SPIFFS.open("/blocklist", "r");
+    File f = SPIFFS.open("/blocklist", FILE_READ);
     if (!f)
         return;
 
@@ -175,9 +195,20 @@ void setupBlockList()
         String line = f.readStringUntil('\n');
         line.trim();
         if (line.length() > 0)
-            blockList.push_back(line);
+        {
+            blockList.insert(line.c_str());
+            removeFromTopQuery(line.c_str());
+        }
     }
     f.close();
+
+    for (const auto &elem : tempList)
+    {
+        if (!blockList.count(elem))
+        {
+            removeFromTopBlock(elem.c_str());
+        }
+    }
 }
 
 void setupDNSLists()

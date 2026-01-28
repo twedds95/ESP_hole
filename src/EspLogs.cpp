@@ -33,8 +33,8 @@ void dualPrintLogf(ESPHOLE_LOGLEVEL logLevel, ESPHOLE_LOGTYPES tagEnum, const ch
         return;
     }
 
-    if (logFile.size() > 64 * 1024)
-    { // 64 KB
+    if (logFile.size() > 1024)
+    { // 1 KB / log
         rollLog();
     }
 

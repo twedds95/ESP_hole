@@ -35,7 +35,7 @@ void savePersistedStats()
 {
   dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
                 ESPHOLE_LOGTYPES::STATS,
-                "Size of data to persist = %u\n",
+                "Size of data to persist = %u",
                 sizeof(stats) + sizeof(hourly) + sizeof(topBlocked) + sizeof(topQueried));
   prefs.begin(STATS_SAVE_ID, false);
   size_t written = 0;
@@ -110,7 +110,8 @@ void handleStats()
 
 void handleLogs()
 {
-  server.on("/logs", HTTP_GET, [](AsyncWebServerRequest *req){
+  server.on("/logs", HTTP_GET, [](AsyncWebServerRequest *req)
+            {
     
     // Use a lambda to stream multiple files sequentially
     AsyncResponseStream *response = req->beginResponseStream("text/plain");
@@ -119,7 +120,7 @@ void handleLogs()
       String fname = String(logName) + (i > 0 ? String(i) : "");
       if (!SPIFFS.exists(fname)) continue;
 
-      File f = SPIFFS.open(fname, "r");
+      File f = SPIFFS.open(fname, FILE_READ);
       if (!f) continue;
 
       uint8_t buf[512];
@@ -130,8 +131,7 @@ void handleLogs()
       f.close();
     }
 
-    req->send(response);
-  });
+    req->send(response); });
 }
 
 void emptyRequestHandler(AsyncWebServerRequest *request) {};
@@ -140,6 +140,10 @@ void handleLists()
   server.on("/list/blocklist", HTTP_GET, handleGetList);
   server.on("/list/whitelist", HTTP_GET, handleGetList);
   server.on("/list/rewrite", HTTP_GET, handleGetList);
+
+  server.on("/list/clear/blocklist", HTTP_GET, handleClearList);
+  server.on("/list/clear/whitelist", HTTP_GET, handleClearList);
+  server.on("/list/clear/rewrite", HTTP_GET, handleClearList);
 
   server.on("/list/blocklist", HTTP_POST, emptyRequestHandler, nullptr, handlePostList);
   server.on("/list/whitelist", HTTP_POST, emptyRequestHandler, nullptr, handlePostList);
@@ -179,7 +183,7 @@ void handleGetList(AsyncWebServerRequest *req)
     return;
   }
 
-  File f = SPIFFS.open(path, "r");
+  File f = SPIFFS.open(path, FILE_READ);
   if (!f)
   {
     req->send(500, "text/plain", "File open failed");
@@ -200,6 +204,26 @@ void reloadLists()
   setupRewrite();
 }
 
+void handleClearList(AsyncWebServerRequest *req)
+{
+  String name = getListName(req);
+  const char *path = getListPath(name);
+
+  if (!path)
+  {
+    req->send(404, "text/plain", "Invalid list");
+    return;
+  }
+
+  SPIFFS.remove(path);
+  reloadLists();
+  req->send(200, "text/plain", "List cleared");
+  dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
+                ESPHOLE_LOGTYPES::STATS,
+                "List %s has been cleared.",
+                name);
+}
+
 void handlePostList(AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t index, size_t total)
 {
   if (index != 0)
@@ -211,14 +235,6 @@ void handlePostList(AsyncWebServerRequest *req, uint8_t *data, size_t len, size_
   if (!path)
   {
     req->send(404, "text/plain", "Invalid list");
-    return;
-  }
-
-  if (total == 0 || req->contentLength() == 0)
-  {
-    SPIFFS.remove(path);
-    reloadLists();
-    req->send(200, "text/plain", "List cleared");
     return;
   }
 
@@ -257,7 +273,7 @@ void handleWhitelistAdds()
       if (addWhiteListEntry(d))
       {        
         req->send(200, "text/plain", "OK");
-        removeFromTopList(topBlocked, d.c_str());
+        removeFromTopBlock(d.c_str());
       }
       else {
         req->send(500, "text/plain", "Error updating rewrite list");
@@ -280,7 +296,7 @@ void handleBlocklistAdds()
       if (addBlockListEntry(d))
       {        
         req->send(200, "text/plain", "OK");
-        removeFromTopList(topQueried, d.c_str());
+        removeFromTopQuery(d.c_str());
       }
       else {
         req->send(500, "text/plain", "Error updating block list");
@@ -399,6 +415,9 @@ void decayTopDomains(DomainStat arr[])
 
 void appendTopArray(String &json, DomainStat arr[])
 {
+  std::sort(arr, arr + TOP_N_TRACKED, [](const DomainStat &a, const DomainStat &b)
+            { return a.count > b.count; });
+
   json += "[";
   bool first = true;
   for (int i = 0; i < TOP_N; i++)
@@ -457,10 +476,9 @@ String getJsonStats()
 
   json += "}";
 
-  dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
-                ESPHOLE_LOGTYPES::STATS,
-                "Sending JSON to Dashboard: %s",
-                json.c_str());
+  // This one is too big / too often to send to logs, just use Serial
+  Serial.printf("[%s] Sending JSON to Dashboard:\n %s\n",
+                LOG_TAG(ESPHOLE_LOGTYPES::STATS), json.c_str());
 
   return json;
 }
@@ -554,20 +572,52 @@ void updateTop(DomainStat arr[], const char *dom, bool wasSentUpstream, IPAddres
   strncpy(arr[minIdx].ip, ip.toString().c_str(), MAX_IP_LEN);
 }
 
-void removeFromTopList(DomainStat arr[], const char *dom)
+void removeFromTopQuery(const char *dom)
+{
+  char domain[MAX_DOMAIN_LEN];
+  strncpy(domain, dom, MAX_DOMAIN_LEN);
+  removeFromTopList(topQueried, dom)
+      ? dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
+                      ESPHOLE_LOGTYPES::STATS,
+                      "Domain '%s' was removed from top queried cached list.",
+                      domain)
+      : dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
+                      ESPHOLE_LOGTYPES::STATS,
+                      "Domain '%s' was not found in top queried cached list.",
+                      domain);
+}
+
+void removeFromTopBlock(const char *dom)
+{
+  char domain[MAX_DOMAIN_LEN];
+  strncpy(domain, dom, MAX_DOMAIN_LEN);
+  removeFromTopList(topBlocked, dom)
+      ? dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
+                      ESPHOLE_LOGTYPES::STATS,
+                      "Domain '%s' was removed from top blocked cached list.",
+                      domain)
+      : dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
+                      ESPHOLE_LOGTYPES::STATS,
+                      "Domain '%s' was not found in top blocked cached list.",
+                      domain);
+}
+
+bool removeFromTopList(DomainStat arr[], const char *dom)
 {
   char domain[MAX_DOMAIN_LEN];
   sanitizeDomain(dom, domain);
   // Check if exists
   for (int i = 0; i < TOP_N_TRACKED; i++)
   {
-    if (arr[i].count && strcmp(arr[i].domain, domain) == 0)
+    if (strcmp(arr[i].domain, domain) == 0)
     {
       strncpy(arr[i].domain, "", MAX_DOMAIN_LEN);
       arr[i].count = 0;
       arr[i].wasSentUpstream = true;
       strncpy(arr[i].ip, (IPAddress(0, 0, 0, 0)).toString().c_str(), MAX_IP_LEN);
-      return;
+      return true;
     }
   }
+
+  return false;
 }

@@ -578,7 +578,7 @@
           const btn = document.createElement('button');
           btn.className = 'action-btn ' + (mode === 'block' ? 'allow' : 'block');
           btn.textContent = mode === 'block' ? '✅' : '⛔';
-          btn.title = mode === 'block' ? 'Whitelist' : 'Block';
+          btn.title = (mode === 'block' ? 'Whitelist' : 'Block') + " " + e.d;
 
           btn.onclick = async () => {
             await fetch(
@@ -674,13 +674,7 @@
         }
 
         if (lines.length === 0) {
-          const clearRes = await fetch(`/list/${currentEdit}`, {
-            method: 'POST', headers: {
-              "Content-Type": "text/plain"
-            },
-            body: "\0"
-          });
-
+          const clearRes = await fetch(`/list/clear/${currentEdit}`);
           if (!clearRes.ok) {
             alert("Failed to clear list");
             return;
