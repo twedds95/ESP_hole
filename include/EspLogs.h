@@ -38,7 +38,7 @@ enum class ESPHOLE_LOGLEVEL : uint8_t
 #define LOG_LVL(lvl) LOG_LVLS[(uint8_t)(lvl)]
 
 void dualPrintLogf(ESPHOLE_LOGLEVEL logLevel, ESPHOLE_LOGTYPES tagEnum, const char *fmt, ...);
-void rollLog();
+File rollLog();
 void setupLogs(ESPHOLE_LOGLEVEL lvl);
 
 #endif //ESPLOGS_H

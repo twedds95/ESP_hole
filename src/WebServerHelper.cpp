@@ -204,13 +204,16 @@ void handleLogs()
               s->remaining -= r;
               return r;
             }
-
-            s->f.close();
+            if (s->f) s->f.close();
           }
 
-          delete s;
           return 0;
         });
+
+    req->onDisconnect([s]() {
+      if (s->f) s->f.close();
+      delete s;
+    });
 
     res->addHeader("X-Log-Total-Size",
                    String(getTotalLogSize()));
