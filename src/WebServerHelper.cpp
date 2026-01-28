@@ -108,30 +108,115 @@ void handleStats()
             { request->send(200, "application/json", getJsonStats()); });
 }
 
+size_t getTotalLogSize()
+{
+  size_t total = 0;
+  for (int i = 0; i < MAX_LOGS; i++)
+  {
+    String fname = String(logName) + (i > 0 ? String(i) : "");
+    if (SPIFFS.exists(fname))
+    {
+      File f = SPIFFS.open(fname, FILE_READ);
+      total += f.size();
+      f.close();
+    }
+  }
+  return total;
+}
+
 void handleLogs()
 {
   server.on("/logs", HTTP_GET, [](AsyncWebServerRequest *req)
+  {
+    size_t offset = req->hasParam("offset")
+                      ? req->getParam("offset")->value().toInt()
+                      : 0;
+
+    size_t limit = req->hasParam("limit")
+                      ? req->getParam("limit")->value().toInt()
+                      : 2048;
+
+    struct State {
+      int fileIndex = MAX_LOGS - 1;
+      size_t skip;
+      size_t remaining;
+      bool skippedFirstLine = false;
+      File f;
+    };
+
+    constexpr size_t LINE_PAD = 256;
+    size_t alignedOffset = (offset > LINE_PAD) ? offset - LINE_PAD : 0;
+
+    State *s = new State();
+    s->skip = alignedOffset;
+    s->remaining = limit;
+
+    AsyncWebServerResponse *res =
+      req->beginChunkedResponse("text/plain",
+        [s, offset](uint8_t *buf, size_t maxLen, size_t) -> size_t
+        {
+          while (s->fileIndex >= 0 && s->remaining > 0)
+          {
+            if (!s->f)
             {
-    
-    // Use a lambda to stream multiple files sequentially
-    AsyncResponseStream *response = req->beginResponseStream("text/plain");
+              String fname = String(logName) +
+                             (s->fileIndex > 0 ? String(s->fileIndex) : "");
+              s->fileIndex--;
 
-    for (int i = MAX_LOGS - 1; i >= 0; i--) { // oldest first
-      String fname = String(logName) + (i > 0 ? String(i) : "");
-      if (!SPIFFS.exists(fname)) continue;
+              if (!SPIFFS.exists(fname)) continue;
 
-      File f = SPIFFS.open(fname, FILE_READ);
-      if (!f) continue;
+              s->f = SPIFFS.open(fname, FILE_READ);
+              if (!s->f) continue;
 
-      uint8_t buf[512];
-      size_t readBytes;
-      while ((readBytes = f.read(buf, sizeof(buf))) > 0) {
-        response->write(buf, readBytes); // streams to client directly
-      }
-      f.close();
-    }
+              if (s->skip > 0)
+              {
+                size_t skipNow = min(s->skip, s->f.size());
+                s->f.seek(skipNow, SeekSet);
+                s->skip -= skipNow;
+              }
+            }
 
-    req->send(response); });
+            if (!s->skippedFirstLine && s->skip == 0)
+            {
+              if (offset > 0) {
+                while (s->f.available()) {
+                  if (s->f.read() == '\n') break;
+                }
+              }
+              s->skippedFirstLine = true;
+            }
+
+            size_t canRead = min({maxLen, s->remaining,
+                                  (size_t)s->f.available()});
+            if (canRead > 0)
+            {
+              size_t r = s->f.read(buf, canRead);
+              if (s->remaining <= maxLen)
+              {
+                for (int i = r - 1; i >= 0; --i) {
+                  if (buf[i] == '\n') {
+                    r = i + 1;
+                    break;
+                  }
+                }
+              }
+
+              s->remaining -= r;
+              return r;
+            }
+
+            s->f.close();
+          }
+
+          delete s;
+          return 0;
+        });
+
+    res->addHeader("X-Log-Total-Size",
+                   String(getTotalLogSize()));
+
+    req->send(res);
+  });
 }
 
 void emptyRequestHandler(AsyncWebServerRequest *request) {};

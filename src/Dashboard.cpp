@@ -610,10 +610,42 @@
           menu.style.display = 'none';
       });
 
+      let totalSize = 0;
+      let offset = 0;
+      let loadingLogs = false;
+      let logSessionId = 0;
+
+      editorArea.addEventListener('scroll', () => {
+        if (currentEdit !== "logs" || loadingLogs) return;
+
+        if (editorArea.scrollTop === 0 && offset > 0) {
+          loadingLogs = true;
+          const next = Math.max(0, offset - 2048);
+          const session = logSessionId;
+
+          fetch(`/logs?offset=${next}&limit=${offset - next}`)
+            .then(r => r.text())
+            .then(t => {
+              if (session !== logSessionId) return;
+
+              const prevHeight = editorArea.scrollHeight;
+              editorArea.value = t + editorArea.value;
+              offset = next;
+
+              editorArea.scrollTop =
+                editorArea.scrollHeight - prevHeight;
+            })
+            .finally(() => loadingLogs = false);
+        }
+      });
+
       let currentEdit = null;
       let cachedLists = {};
 
       async function openLogs() {
+        logSessionId++;
+        loadingLogs = true;
+
         currentEdit = "logs";
         editorOverlay.style.display = 'block';
         editor.classList.add('logEditor');
@@ -625,16 +657,25 @@
         document.getElementById("editorOk").style.display = "none";
         document.getElementById("editorCancel").textContent = "Close";
 
+        const session = logSessionId;
+
         try {
-          const res = await fetch("/logs", { cache: "no-store" });
-          editorArea.value = res.ok
-            ? await res.text()
-            : "Failed to load logs";
+          const r = await fetch('/logs?limit=2048');
+          if (session !== logSessionId) return;
+
+          totalSize = parseInt(r.headers.get('X-Log-Total-Size')) || 0;
+          offset = Math.max(0, totalSize - 2048);
+
+          const t = await r.text();
+          if (session !== logSessionId) return;
+
+          editorArea.value = t;
+          editorArea.scrollTop = editorArea.scrollHeight;
         } catch (e) {
           editorArea.value = "Error loading logs";
+        } finally {
+          loadingLogs = false;
         }
-
-        editorArea.scrollTop = editorArea.scrollHeight;
       }
 
       async function openEditor(type) {
@@ -721,13 +762,20 @@
       }
 
       function closeEditor() {
-        editorOverlay.style.display = 'none';        
+        logSessionId++;
+        loadingLogs = false;
+
+        editorOverlay.style.display = 'none';
         editor.classList.remove('logEditor');
         editorArea.readOnly = false;
         editorArea.value = "";
+
         document.getElementById("editorOk").style.display = "inline-block";
         document.getElementById("editorCancel").textContent = "Cancel";
+
         currentEdit = null;
+        offset = 0;
+        totalSize = 0;
       }
 
       resizeCanvas();
