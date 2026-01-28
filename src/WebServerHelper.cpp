@@ -113,11 +113,14 @@ size_t getTotalLogSize()
   size_t total = 0;
   for (int i = 0; i < MAX_LOGS; i++)
   {
-    String fname = String(logName) + (i > 0 ? String(i) : "");
+    String fname = String(logName) + (i > 0 ? String(i) : String());
     if (SPIFFS.exists(fname))
     {
       File f = SPIFFS.open(fname, FILE_READ);
       total += f.size();
+      serialPrintLogf("[%s] getTotalLogSize: File %s has size %d\n",
+                      LOG_TAG(ESPHOLE_LOGTYPES::CODE),
+                      fname, f.size());
       f.close();
     }
   }
@@ -127,20 +130,26 @@ size_t getTotalLogSize()
 void handleLogs()
 {
   server.on("/logs", HTTP_GET, [](AsyncWebServerRequest *req)
-  {
-    size_t offset = req->hasParam("offset")
-                      ? req->getParam("offset")->value().toInt()
-                      : 0;
-
-    size_t limit = req->hasParam("limit")
-                      ? req->getParam("limit")->value().toInt()
-                      : 2048;
+            {
+    size_t totalSize = getTotalLogSize();
+    
+    size_t limit = req->hasParam("limit") ? 
+      req->getParam("limit")->value().toInt():
+      2048;
+              
+    size_t offset;
+    if (req->hasParam("offset")) {
+      offset = req->getParam("offset")->value().toInt();
+    } else {
+      offset = (totalSize > limit) ? totalSize - limit : 0;
+    }
 
     struct State {
       int fileIndex = MAX_LOGS - 1;
       size_t skip;
       size_t remaining;
       bool skippedFirstLine = false;
+      bool needsLeadingNewline = false;
       File f;
     };
 
@@ -157,17 +166,31 @@ void handleLogs()
         {
           while (s->fileIndex >= 0 && s->remaining > 0)
           {
+            serialPrintLogf("[%s] skip=%d remaining=%d fileIndex=%d\n",
+              LOG_TAG(ESPHOLE_LOGTYPES::CODE),
+              s->skip, s->remaining, s->fileIndex);
             if (!s->f)
             {
               String fname = String(logName) +
-                             (s->fileIndex > 0 ? String(s->fileIndex) : "");
-              s->fileIndex--;
-
+                             (s->fileIndex > 0 ? String(s->fileIndex) : String());
+              s->fileIndex--;              
+              serialPrintLogf("[%s] HandleLogs: Try to open %s\n",
+                LOG_TAG(ESPHOLE_LOGTYPES::CODE), fname.c_str());
               if (!SPIFFS.exists(fname)) continue;
 
               s->f = SPIFFS.open(fname, FILE_READ);
               if (!s->f) continue;
+              
+              if (s->needsLeadingNewline && s->remaining > 0)
+              {
+                buf[0] = '\n';
+                s->needsLeadingNewline = false;
+                s->remaining--;
+                return 1;
+              }
 
+              serialPrintLogf("[%s] HandleLogs: %s file being read.\n",
+                LOG_TAG(ESPHOLE_LOGTYPES::CODE), fname.c_str());
               if (s->skip > 0)
               {
                 size_t skipNow = min(s->skip, s->f.size());
@@ -189,7 +212,9 @@ void handleLogs()
             size_t canRead = min({maxLen, s->remaining,
                                   (size_t)s->f.available()});
             if (canRead > 0)
-            {
+            {              
+              serialPrintLogf("[%s] HandleLogs: %s file can be read, sent to buffer.\n",
+                LOG_TAG(ESPHOLE_LOGTYPES::CODE), s->f.name());
               size_t r = s->f.read(buf, canRead);
               if (s->remaining <= maxLen)
               {
@@ -204,7 +229,17 @@ void handleLogs()
               s->remaining -= r;
               return r;
             }
-            if (s->f) s->f.close();
+            if (s->f)
+            {
+              if (s->f.size() > 0)
+              {
+                s->f.seek(s->f.size() - 1, SeekSet);
+                if (s->f.read() != '\n') {
+                  s->needsLeadingNewline = true;
+                }
+              }
+              s->f.close();
+            }
           }
 
           return 0;
@@ -215,11 +250,8 @@ void handleLogs()
       delete s;
     });
 
-    res->addHeader("X-Log-Total-Size",
-                   String(getTotalLogSize()));
-
-    req->send(res);
-  });
+    res->addHeader("X-Log-Total-Size", String(totalSize));
+    req->send(res); });
 }
 
 void emptyRequestHandler(AsyncWebServerRequest *request) {};
@@ -565,8 +597,8 @@ String getJsonStats()
   json += "}";
 
   // This one is too big / too often to send to logs, just use Serial
-  Serial.printf("[%s] Sending JSON to Dashboard:\n %s\n",
-                LOG_TAG(ESPHOLE_LOGTYPES::STATS), json.c_str());
+  serialPrintLogf("[%s] Sending JSON to Dashboard:\n %s\n",
+                  LOG_TAG(ESPHOLE_LOGTYPES::STATS), json.c_str());
 
   return json;
 }

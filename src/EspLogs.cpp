@@ -33,8 +33,8 @@ void dualPrintLogf(ESPHOLE_LOGLEVEL logLevel, ESPHOLE_LOGTYPES tagEnum, const ch
         return;
     }
 
-    if (logFile.size() > 1024)
-    { // 1 KB / log
+    if (logFile.size() > 10 * 1024)
+    { // 10 KB / log
         logFile = rollLog();
     }
 
@@ -63,11 +63,21 @@ File rollLog()
         String oldName = String(logName) + (i > 0 ? String(i) : "");
         String newName = String(logName) + String(i + 1);
         if (SPIFFS.exists(oldName))
+        {
+            dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
+                          ESPHOLE_LOGTYPES::CODE,
+                          "Rolled Log %s to %s",
+                          oldName, newName);
             SPIFFS.rename(oldName, newName);
+        }
     }
 
     String newLog = String(logName);
     File logFile = SPIFFS.open(newLog, FILE_WRITE);
+    dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
+                  ESPHOLE_LOGTYPES::CODE,
+                  "Created new Log %s",
+                  newLog);
     return logFile;
 }
 
@@ -81,7 +91,10 @@ void setupLogs(ESPHOLE_LOGLEVEL lvl)
     }
     else
     {
-        dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::CODE, "Loggin Initialized with Log Level: %s", LOG_LVL(lvl));
+        dualPrintLogf(ESPHOLE_LOGLEVEL::INFO,
+                      ESPHOLE_LOGTYPES::CODE,
+                      "Loggin Initialized with Log Level: %s",
+                      LOG_LVL(lvl));
     }
 
     logFile.close();
