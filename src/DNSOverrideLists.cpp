@@ -1,5 +1,13 @@
 #include <DNSOverrideLists.h>
 
+#include <SPIFFS.h>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+
+#include <EspLogs.h>
+#include <WebServerHelper.h>
+
 std::unordered_map<std::string, IPAddress> rewriteRules;
 std::unordered_set<std::string> whiteList;
 std::unordered_set<std::string> blockList;

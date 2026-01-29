@@ -2,13 +2,9 @@
 #define DNSOVERRIDELISTS_H
 
 #include <Arduino.h>
-#include <SPIFFS.h>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
-
-#include <EspLogs.h>
-#include <WebServerHelper.h>
 
 const std::unordered_map<std::string, IPAddress> &getRewriteRules();
 const std::unordered_set<std::string> &getWhiteList();

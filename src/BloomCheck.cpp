@@ -1,5 +1,9 @@
 #include <BloomCheck.h>
 
+#include <SPIFFS.h>
+
+#include <EspLogs.h>
+
 File bloomFile;
 
 static uint32_t bloomHash(const char *s, uint32_t seed)

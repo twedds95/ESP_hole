@@ -1,5 +1,14 @@
 #include <WebServerHelper.h>
 
+#include <algorithm>
+#include <ESPAsyncWebServer.h>
+#include <SPIFFS.h>
+
+#include <Dashboard.cpp>
+#include <DNSOverrideLists.h>
+#include <EspLogs.h>
+
+
 AsyncWebServer server(80);
 
 unsigned long lastHourTick = 0;

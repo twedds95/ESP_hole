@@ -1,5 +1,8 @@
 #include <EspLogs.h>
 
+#include <SPIFFS.h>
+#include <stdarg.h>
+
 static uint32_t lastFlush = 0;
 ESPHOLE_LOGLEVEL LOG_LEVEL = ESPHOLE_LOGLEVEL::INFO; // default
 

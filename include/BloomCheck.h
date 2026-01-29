@@ -2,9 +2,6 @@
 #define BLOOMCHECK_H
 
 #include <Arduino.h>
-#include <SPIFFS.h>
-
-#include <EspLogs.h>
 
 #define BLOOM_BITS 12500000
 #define BLOOM_HASHES 6

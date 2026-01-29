@@ -3,7 +3,6 @@
 
 #include <Arduino.h>
 #include <SPIFFS.h>
-#include <stdarg.h>
 
 #define logName "/esplogs"
 #define MAX_LOGS 3

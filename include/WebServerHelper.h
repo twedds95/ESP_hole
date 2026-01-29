@@ -2,13 +2,9 @@
 #define WEBSERVERHELPER_H
 
 #include <Arduino.h>
-#include <algorithm>
 #include <ESPAsyncWebServer.h>
-
-#include <DNSOverrideLists.h>
 #include <EspLogs.h>
 
-#include <Dashboard.cpp>
 
 #define HOURS 24
 // track more domains but only show top 10 in Dashboard
