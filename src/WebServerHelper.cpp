@@ -151,6 +151,9 @@ void handleLogs()
       bool skippedFirstLine = false;
       bool needsLeadingNewline = false;
       File f;
+      bool haveCarry = false;
+      char carry[256];
+      size_t carryLen = 0;
     };
 
     constexpr size_t LINE_PAD = 256;
@@ -177,7 +180,11 @@ void handleLogs()
               serialPrintLogf("[%s] HandleLogs: Try to open %s\n",
                 LOG_TAG(ESPHOLE_LOGTYPES::CODE), fname.c_str());
               if (!SPIFFS.exists(fname)) continue;
-
+ 
+              if (s->haveCarry) {
+                s->carry[s->carryLen++] = '\n';
+              }
+ 
               s->f = SPIFFS.open(fname, FILE_READ);
               if (!s->f) continue;
               
@@ -212,10 +219,56 @@ void handleLogs()
             size_t canRead = min({maxLen, s->remaining,
                                   (size_t)s->f.available()});
             if (canRead > 0)
-            {              
+            {
+              size_t out = 0;
+              if (s->haveCarry) {                
+              serialPrintLogf("[%s] HandleLogs: %s carryover sent to buffer.\n",
+                LOG_TAG(ESPHOLE_LOGTYPES::CODE), s->f.name());
+                size_t copy = min(maxLen, s->carryLen);
+                memcpy(buf, s->carry, copy);
+                out += copy;
+                if (copy < s->carryLen) {
+                  memmove(s->carry, s->carry + copy, s->carryLen - copy);
+                  s->carryLen -= copy;
+                  return out;
+                }
+
+                s->haveCarry = false;
+              }
+
               serialPrintLogf("[%s] HandleLogs: %s file can be read, sent to buffer.\n",
                 LOG_TAG(ESPHOLE_LOGTYPES::CODE), s->f.name());
-              size_t r = s->f.read(buf, canRead);
+              size_t r = s->f.read(buf + out, canRead - out);
+              r += out;
+
+              int lastNL = -1;
+              for (int i = r - 1; i >= 0; --i) {
+                if (buf[i] == '\n') {
+                  lastNL = i;
+                  break;
+                }
+              }
+
+              if (lastNL < 0) {
+                // whole chunk is partial line -> stash it
+                memcpy(s->carry, buf, r);
+                s->carryLen = r;
+                s->haveCarry = true;
+                return 0;
+              }
+
+              // stash trailing partial
+              size_t tail = r - (lastNL + 1);
+              if (tail > 0) {
+                memcpy(s->carry, buf + lastNL + 1, tail);
+                s->carryLen = tail;
+                s->haveCarry = true;
+              }
+
+              size_t emit = lastNL + 1;
+              s->remaining -= emit;
+              return emit;
+
               if (s->remaining <= maxLen)
               {
                 for (int i = r - 1; i >= 0; --i) {
