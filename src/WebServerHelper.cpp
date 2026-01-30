@@ -24,8 +24,6 @@ PersistedStats stats;
 #define currentHour stats._currentHour
 
 HourStats hourly[HOURS];
-DomainStat topBlocked[TOP_N_TRACKED];
-DomainStat topQueried[TOP_N_TRACKED];
 
 struct ListDef
 {
@@ -45,23 +43,19 @@ void savePersistedStats()
   dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
                 ESPHOLE_LOGTYPES::STATS,
                 "Size of data to persist = %u",
-                sizeof(stats) + sizeof(hourly) + sizeof(topBlocked) + sizeof(topQueried));
+                sizeof(stats) + sizeof(hourly));
   prefs.begin(STATS_SAVE_ID, false);
   size_t written = 0;
   written += prefs.putBytes(STATS_SAVE_KEY, &stats, sizeof(stats));
   written += prefs.putBytes(HOUR_SAVE_KEY, hourly, sizeof(hourly));
-  written += prefs.putBytes(BLOCKS_SAVE_KEY, topBlocked, sizeof(topBlocked));
-  written += prefs.putBytes(QUERIES_SAVE_KEY, topQueried, sizeof(topQueried));
   prefs.end();
   dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
                 ESPHOLE_LOGTYPES::STATS,
-                "Version %d - Persisted %u bytes (stats=%u hourly=%u blocks=%u queries=%u)",
+                "Version %d - Persisted %u bytes (stats=%u hourly=%u)",
                 STATS_VERSION,
                 written,
                 sizeof(stats),
-                sizeof(hourly),
-                sizeof(topBlocked),
-                sizeof(topQueried));
+                sizeof(hourly));
 }
 
 void loadPersistedStats()
@@ -99,9 +93,6 @@ void loadPersistedStats()
   }
 
   prefs.getBytes(HOUR_SAVE_KEY, hourly, sizeof(hourly));
-  prefs.getBytes(BLOCKS_SAVE_KEY, topBlocked, sizeof(topBlocked));
-  prefs.getBytes(QUERIES_SAVE_KEY, topQueried, sizeof(topQueried));
-
   prefs.end();
 }
 
@@ -522,15 +513,6 @@ void handleListUpdates()
   handleLists();
 }
 
-const DomainStat *getTopBlocked()
-{
-  return topBlocked;
-}
-
-const DomainStat *getTopQueried()
-{
-  return topQueried;
-}
 
 void setupServerHelper()
 {
@@ -551,10 +533,11 @@ void setupServerHelper()
 void handleTimeSensitiveRotations()
 {
   unsigned long now = millis();
-  if (now - lastPersistedTick > 600000UL) // persist data every 10mins
+  if (now - lastPersistedTick > 900000UL) // persist data every 15mins
   {
     lastPersistedTick = now;
     savePersistedStats();
+    saveTopStats();
   }
 
   if (now - lastHourTick < 3600000UL)
@@ -565,8 +548,11 @@ void handleTimeSensitiveRotations()
   lastHourTick = now;
   currentHour = (currentHour + 1) % HOURS;
 
-  decayTopDomains(topBlocked);
-  decayTopDomains(topQueried);
+  if (totalQueries > 0)
+  {
+    double_t hourPercentEstimate = (double_t)hourly[currentHour].queries / (double_t)totalQueries;
+    decayTopDomains(hourPercentEstimate, totalQueries);
+  }
 
   totalQueries -= hourly[currentHour].queries;
   totalBlocked -= hourly[currentHour].blocked;
@@ -579,40 +565,22 @@ void handleTimeSensitiveRotations()
   hourly[currentHour].hourProcessTime = 0;
 }
 
-void decayTopDomains(DomainStat arr[])
+void appendTopArray(String &json, const std::set<DomainStat, DomainStatCompare> set)
 {
-  double_t hourPercentEstimate = (double_t)hourly[currentHour].queries / (double_t)totalQueries;
-  for (int i = 0; i < TOP_N_TRACKED; i++)
-  {
-    if (arr[i].count <= 0)
-    {
-      continue;
-    }
-
-    double_t domPercentEstimate = (double_t)arr[i].count / (double_t)totalQueries;
-    uint32_t decayAmount = (uint32_t)(domPercentEstimate * hourPercentEstimate * arr[i].count);
-    arr[i].count -= decayAmount;
-  }
-}
-
-void appendTopArray(String &json, DomainStat arr[])
-{
-  std::sort(arr, arr + TOP_N_TRACKED, [](const DomainStat &a, const DomainStat &b)
-            { return a.count > b.count; });
-
   json += "[";
   bool first = true;
-  for (int i = 0; i < TOP_N; i++)
-  {
-    if (arr[i].count == 0)
+  const auto begin = set.begin();
+  const auto end = set.size() < TOP_N ? set.end() : std::next(begin, 10);
+  for (auto it = begin; it != end; ++it) {
+    if (it->count == 0)
       continue;
     if (!first)
       json += ",";
     first = false;
     json += "{";
-    json += "\"d\":\"" + String(arr[i].domain) + "\",";
-    json += "\"u\":" + String(arr[i].wasSentUpstream) + ",";
-    json += "\"c\":" + String(arr[i].count);
+    json += "\"d\":\"" + String(it->domain) + "\",";
+    json += "\"u\":" + String(it->wasSentUpstream) + ",";
+    json += "\"c\":" + String(it->count);
     json += "}";
   }
   json += "]";
@@ -651,9 +619,9 @@ String getJsonStats()
   // Top domains
   json += "\"top\":{";
   json += "\"queried\":";
-  appendTopArray(json, topQueried);
+  appendTopArray(json, getTopQueriedSet());
   json += ",\"blocked\":";
-  appendTopArray(json, topBlocked);
+  appendTopArray(json, getTopBlockedSet());
   json += "}";
 
   json += "}";
@@ -684,122 +652,4 @@ void recordQuery(bool blocked, const char *domain, bool wasSentUpstream, uint32_
   {
     updateTopQueried(domain, wasSentUpstream, ip);
   }
-}
-
-void sanitizeDomain(const char *in, char *domain)
-{
-  size_t used = 0;
-  while (*in && used + 1 < MAX_DOMAIN_LEN)
-  {
-    char c = *in++;
-    if ((c >= 'a' && c <= 'z') ||
-        (c >= '0' && c <= '9') ||
-        c == '-' || c == '.')
-    {
-      domain[used++] = c;
-    }
-  }
-
-  domain[used] = '\0';
-}
-
-void updateTopBlocked(const char *domain, bool wasSentUpstream)
-{
-  updateTop(topBlocked, domain, wasSentUpstream);
-}
-
-void updateTopQueried(const char *domain, bool wasSentUpstream, IPAddress ip)
-{
-  updateTop(topQueried, domain, wasSentUpstream, ip);
-}
-
-void updateTop(DomainStat arr[], const char *dom, bool wasSentUpstream, IPAddress ip)
-{
-  char domain[MAX_DOMAIN_LEN];
-  sanitizeDomain(dom, domain);
-  // Check if exists
-  for (int i = 0; i < TOP_N_TRACKED; i++)
-  {
-    if (arr[i].count && strcmp(arr[i].domain, domain) == 0)
-    {
-      arr[i].count++;
-      return;
-    }
-  }
-
-  // Find empty slot
-  for (int i = 0; i < TOP_N_TRACKED; i++)
-  {
-    if (arr[i].count == 0)
-    {
-      strncpy(arr[i].domain, domain, MAX_DOMAIN_LEN);
-      arr[i].count = 1;
-      arr[i].wasSentUpstream = wasSentUpstream;
-      strncpy(arr[i].ip, ip.toString().c_str(), MAX_IP_LEN);
-      return;
-    }
-  }
-
-  // Replace smallest
-  int minIdx = 0;
-  for (int i = 1; i < TOP_N_TRACKED; i++)
-  {
-    if (arr[i].count < arr[minIdx].count)
-      minIdx = i;
-  }
-
-  strncpy(arr[minIdx].domain, domain, MAX_DOMAIN_LEN);
-  arr[minIdx].count = 1;
-  arr[minIdx].wasSentUpstream = wasSentUpstream;
-  strncpy(arr[minIdx].ip, ip.toString().c_str(), MAX_IP_LEN);
-}
-
-void removeFromTopQuery(const char *dom)
-{
-  char domain[MAX_DOMAIN_LEN];
-  strncpy(domain, dom, MAX_DOMAIN_LEN);
-  removeFromTopList(topQueried, dom)
-      ? dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
-                      ESPHOLE_LOGTYPES::STATS,
-                      "Domain '%s' was removed from top queried cached list.",
-                      domain)
-      : dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
-                      ESPHOLE_LOGTYPES::STATS,
-                      "Domain '%s' was not found in top queried cached list.",
-                      domain);
-}
-
-void removeFromTopBlock(const char *dom)
-{
-  char domain[MAX_DOMAIN_LEN];
-  strncpy(domain, dom, MAX_DOMAIN_LEN);
-  removeFromTopList(topBlocked, dom)
-      ? dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
-                      ESPHOLE_LOGTYPES::STATS,
-                      "Domain '%s' was removed from top blocked cached list.",
-                      domain)
-      : dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
-                      ESPHOLE_LOGTYPES::STATS,
-                      "Domain '%s' was not found in top blocked cached list.",
-                      domain);
-}
-
-bool removeFromTopList(DomainStat arr[], const char *dom)
-{
-  char domain[MAX_DOMAIN_LEN];
-  sanitizeDomain(dom, domain);
-  // Check if exists
-  for (int i = 0; i < TOP_N_TRACKED; i++)
-  {
-    if (strcmp(arr[i].domain, domain) == 0)
-    {
-      strncpy(arr[i].domain, "", MAX_DOMAIN_LEN);
-      arr[i].count = 0;
-      arr[i].wasSentUpstream = true;
-      strncpy(arr[i].ip, (IPAddress(0, 0, 0, 0)).toString().c_str(), MAX_IP_LEN);
-      return true;
-    }
-  }
-
-  return false;
 }

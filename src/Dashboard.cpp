@@ -562,8 +562,7 @@
       function renderTop(id, list, mode) {
         const ul = document.getElementById(id);
         ul.innerHTML = '';
-        list.sort((a, b) => b.c - a.c);
-
+        
         list.forEach(e => {
           const li = document.createElement('li');
           const dom = document.createElement('span');

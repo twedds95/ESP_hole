@@ -10,6 +10,7 @@
 #include <DNSHelper.h>
 #include <DNSOverrideLists.h>
 #include <DNSServer.h>
+#include <DNSTopDomainLists.h>
 #include <EspLogs.h>
 #include <WebServerHelper.h>
 
@@ -46,6 +47,7 @@ void setup()
 
     setupBloom();
     setupDNSHelper();
+    loadCachedTopStats();
     dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::DNS, "Upstream DNSs: %s, %s", WiFi.dnsIP(0).toString().c_str(), WiFi.dnsIP(1).toString().c_str());
 
     setupDNSLists();
@@ -86,7 +88,6 @@ void setupWifi()
 
 void loop()
 {
-    handleTimeSensitiveRotations();
     int dnsOK = dnsServer.processNextRequest();
     if (dnsOK == 0)
     {

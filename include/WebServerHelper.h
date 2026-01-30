@@ -3,16 +3,14 @@
 
 #include <Arduino.h>
 #include <ESPAsyncWebServer.h>
+
+#include <DNSTopDomainLists.h>
 #include <EspLogs.h>
 
 
 #define HOURS 24
 // track more domains but only show top 10 in Dashboard
 #define TOP_N 10
-#define TOP_N_TRACKED 40 // tracking more causes issues with persistence
-#define MAX_DOMAIN_LEN 48
-#define MAX_IP_LEN 16
-
 
 struct DnsLogEvent
 {
@@ -31,16 +29,6 @@ struct DnsLogEvent
 #define STATS_SAVE_ID "esp_hole"
 #define STATS_SAVE_KEY "stats"
 #define HOUR_SAVE_KEY "hourly"
-#define BLOCKS_SAVE_KEY "top_blk"
-#define QUERIES_SAVE_KEY "top_qry"
-
-struct DomainStat
-{
-  char domain[MAX_DOMAIN_LEN];
-  uint32_t count;
-  bool wasSentUpstream;
-  char ip[MAX_IP_LEN];
-};
 
 struct HourStats
 {
@@ -72,24 +60,14 @@ void reloadLists();
 void handleClearList(AsyncWebServerRequest *req);
 void handlePostList(AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t index, size_t total);
 void handleListUpdates();
-const DomainStat* getTopBlocked();
-const DomainStat* getTopQueried();
 
 void savePersistedStats();
 void loadPersistedStats();
 void setupServerHelper();
 
-void appendTopArray(String &json, DomainStat arr[]);
+void appendTopArray(String &json, const std::set<DomainStat, DomainStatCompare> set);
 String getJsonStats();
 void handleTimeSensitiveRotations();
-void decayTopDomains(DomainStat arr[]);
 void recordQuery(bool blocked, const char *domain, bool wasSentUpstream, uint32_t resolveTime, uint32_t procTime, IPAddress ip);
-void sanitizeDomain(const char *dom, char *domain);
-void updateTopBlocked(const char *domain, bool wasSentUpstream);
-void updateTopQueried(const char *domain, bool wasSentUpstream, IPAddress ip);
-void updateTop(DomainStat arr[], const char *dom, bool wasSentUpstream, IPAddress ip = IPAddress(0, 0, 0, 0));
-void removeFromTopBlock(const char *dom);
-void removeFromTopQuery(const char *dom);
-bool removeFromTopList(DomainStat arr[], const char *dom);
 
 #endif // WEBSERVERHELPER_H

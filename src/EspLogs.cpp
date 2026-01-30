@@ -11,7 +11,9 @@ void dualPrintLogf(ESPHOLE_LOGLEVEL logLevel, ESPHOLE_LOGTYPES tagEnum, const ch
     if (logLevel > LOG_LEVEL)
         return;
 
-    const char *tag = LOG_TAG(tagEnum);
+    String tagStr = LOG_TAG(tagEnum);
+    if (logLevel == ESPHOLE_LOGLEVEL::ERROR) tagStr+= " - ERROR";
+    const char *tag = tagStr.c_str();
     char msg[MAX_LOG_MSG_LEN];
     char buf[MAX_LOG_MSG_LEN + 64];
 

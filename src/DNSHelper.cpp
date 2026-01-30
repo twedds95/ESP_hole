@@ -76,29 +76,26 @@ bool isRewrite(const char *domain, IPAddress &ip)
 
 bool isCached(const char *domain, IPAddress &ip)
 {
-    const DomainStat *topQueried = getTopQueried();
-    for (int i = 0; i < TOP_N_TRACKED; i++)
+    auto topQueried = getTopQueriedMap();
+    auto it = topQueried.find(domain);
+    if (it != topQueried.end())
     {
-        if (topQueried[i].count && strcmp(topQueried[i].domain, domain) == 0)
+        DomainStat& stat = it->second;
+        if (!ip.fromString(stat.ip))
         {
-            if (!ip.fromString(topQueried[i].ip))
-            {
-                return false;
-            }
-            return true;
+            return false;
         }
+        return true;
     }
 
-    const DomainStat *topBlocked = getTopBlocked();
-    for (int i = 0; i < TOP_N_TRACKED; i++)
+    auto topBlocked = getTopBlockedMap();
+    it = topBlocked.find(domain);
+    if (it != topBlocked.end())
     {
-        if (topBlocked[i].count && strcmp(topBlocked[i].domain, domain) == 0)
-        {
-            ip = IPAddress(0, 0, 0, 0);
-            return true;
-        }
+        ip = IPAddress(0, 0, 0, 0);
+        return true;
     }
-
+    
     return false;
 }
 
@@ -200,6 +197,7 @@ void statsTask(void *arg)
 
     for (;;)
     {
+        handleTimeSensitiveRotations();
         if (xQueueReceive(dnsLogQueue, &ev, portMAX_DELAY))
         {
             recordQuery(ev.blocked, ev.domain, ev.wasSentUpstream, ev.resolveMs, ev.processMs, ev.ip);
