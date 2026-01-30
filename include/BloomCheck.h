@@ -10,5 +10,6 @@
 static uint32_t bloomHash(const char *s, uint32_t seed);
 bool bloomCheck(const char *domain);
 void setupBloom();
+void handleTimedBloomMsg();
 
 #endif //BLOOMCHECK_H

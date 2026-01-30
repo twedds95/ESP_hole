@@ -1,5 +1,6 @@
 #include <SecondCoreLoop.h>
 
+#include <BloomCheck.h>
 #include <DNSTopDomainLists.h>
 #include <ESPLogs.h>
 #include <WebServerHelper.h>
@@ -40,6 +41,7 @@ void secondLoopTask(void *arg)
     for (;;)
     {
         handleTimeSensitiveRotations();
+        handleTimedBloomMsg();
         if (xQueueReceive(dnsLogQueue, &ev, portMAX_DELAY))
         {
             recordQuery(ev.blocked, ev.domain, ev.wasSentUpstream, ev.resolveMs, ev.processMs, ev.ip);

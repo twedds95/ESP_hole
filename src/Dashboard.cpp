@@ -779,7 +779,7 @@
 
       resizeCanvas();
       loadStats();
-      setInterval(loadStats, 30000); //30s
+      setInterval(loadStats, 60000); //60s
     </script>
   </body>
 

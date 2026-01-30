@@ -3,8 +3,11 @@
 #include <SPIFFS.h>
 #include <stdarg.h>
 
-static uint32_t lastFlush = 0;
-ESPHOLE_LOGLEVEL LOG_LEVEL = ESPHOLE_LOGLEVEL::INFO; // default
+namespace
+{
+    uint32_t lastFlush = 0;
+    ESPHOLE_LOGLEVEL LOG_LEVEL = ESPHOLE_LOGLEVEL::INFO; // default
+}
 
 void dualPrintLogf(ESPHOLE_LOGLEVEL logLevel, ESPHOLE_LOGTYPES tagEnum, const char *fmt, ...)
 {
@@ -12,7 +15,8 @@ void dualPrintLogf(ESPHOLE_LOGLEVEL logLevel, ESPHOLE_LOGTYPES tagEnum, const ch
         return;
 
     String tagStr = LOG_TAG(tagEnum);
-    if (logLevel == ESPHOLE_LOGLEVEL::ERROR) tagStr+= " - ERROR";
+    if (logLevel == ESPHOLE_LOGLEVEL::ERROR)
+        tagStr += " - ERROR";
     const char *tag = tagStr.c_str();
     char msg[MAX_LOG_MSG_LEN];
     char buf[MAX_LOG_MSG_LEN + 64];

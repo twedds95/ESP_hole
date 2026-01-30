@@ -13,13 +13,7 @@ const std::unordered_set<std::string> &getBlockList();
 bool addRewriteRule(const char *domain, const char *ipStr);
 bool addWhiteListEntry(const String &entry);
 bool addBlockListEntry(const String &entry);
-bool addListEntry(const String &entry, const char *fName, std::unordered_set<std::string> &list);
-bool removeListEntry(const String &entry, const char *fName, std::unordered_set<std::string> &list);
 
 void setupDNSLists();
-
-void setupRewrite();
-void setupWhiteList();
-void setupBlockList();
 
 #endif // DNSOVERRIDELISTS_H

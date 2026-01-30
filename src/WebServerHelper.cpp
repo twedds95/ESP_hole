@@ -8,14 +8,15 @@
 #include <DNSOverrideLists.h>
 #include <EspLogs.h>
 
+namespace
+{
+  AsyncWebServer server(80);
 
-AsyncWebServer server(80);
+  unsigned long lastHourTick = 0;
+  unsigned long lastPersistedTick = 0;
 
-unsigned long lastHourTick = 0;
-unsigned long lastPersistedTick = 0;
-
-Preferences prefs;
-PersistedStats stats;
+  Preferences prefs;
+  PersistedStats stats;
 
 #define totalQueries stats._totalQueries
 #define totalBlocked stats._totalBlocked
@@ -23,20 +24,21 @@ PersistedStats stats;
 #define totalAddedTime stats._processTime
 #define currentHour stats._currentHour
 
-HourStats hourly[HOURS];
+  HourStats hourly[HOURS];
 
-struct ListDef
-{
-  const char *name;
-  const char *path;
-};
+  struct ListDef
+  {
+    const char *name;
+    const char *path;
+  };
 
-ListDef lists[] = {
-    {"blocklist", "/blocklist"},
-    {"whitelist", "/whitelist"},
-    {"rewrite", "/rewrite"}};
+  ListDef lists[] = {
+      {"blocklist", "/blocklist"},
+      {"whitelist", "/whitelist"},
+      {"rewrite", "/rewrite"}};
 
-const int LIST_COUNT = sizeof(lists) / sizeof(lists[0]);
+  const int LIST_COUNT = sizeof(lists) / sizeof(lists[0]);
+}
 
 void savePersistedStats()
 {
@@ -372,9 +374,7 @@ void handleGetList(AsyncWebServerRequest *req)
 
 void reloadLists()
 {
-  setupBlockList();
-  setupWhiteList();
-  setupRewrite();
+  setupDNSLists();
 }
 
 void handleClearList(AsyncWebServerRequest *req)
@@ -513,7 +513,6 @@ void handleListUpdates()
   handleLists();
 }
 
-
 void setupServerHelper()
 {
   loadPersistedStats();
@@ -571,7 +570,8 @@ void appendTopArray(String &json, const std::set<DomainStat, DomainStatCompare> 
   bool first = true;
   const auto begin = set.begin();
   const auto end = set.size() < TOP_N ? set.end() : std::next(begin, 10);
-  for (auto it = begin; it != end; ++it) {
+  for (auto it = begin; it != end; ++it)
+  {
     if (it->count == 0)
       continue;
     if (!first)
