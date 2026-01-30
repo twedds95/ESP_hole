@@ -12,6 +12,7 @@
 #include <DNSServer.h>
 #include <DNSTopDomainLists.h>
 #include <EspLogs.h>
+#include <SecondCoreLoop.h>
 #include <WebServerHelper.h>
 
 // Edit these to match your preference
@@ -41,14 +42,18 @@ void setup()
     bool dns_running = dnsServer.start(DNS_PORT, "*", WiFi.localIP());
     if (!dns_running)
     {
-        dualPrintLogf(ESPHOLE_LOGLEVEL::ERROR, ESPHOLE_LOGTYPES::DNS, "DNS Server not running");
+        dualPrintLogf(ESPHOLE_LOGLEVEL::ERROR, ESPHOLE_LOGTYPES::DNS,
+                      "DNS Server not running");
         return;
     }
 
     setupBloom();
-    setupDNSHelper();
+    setupSecondaryLoop();
     loadCachedTopStats();
-    dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::DNS, "Upstream DNSs: %s, %s", WiFi.dnsIP(0).toString().c_str(), WiFi.dnsIP(1).toString().c_str());
+    dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::DNS,
+                  "Upstream DNSs: %s, %s",
+                  WiFi.dnsIP(0).toString().c_str(),
+                  WiFi.dnsIP(1).toString().c_str());
 
     setupDNSLists();
     setupServerHelper();
@@ -82,7 +87,7 @@ void setupWifi()
         dualPrintLogf(ESPHOLE_LOGLEVEL::INFO, ESPHOLE_LOGTYPES::WIFI, "WiFi connected | IP address: %s", WiFi.localIP().toString().c_str());
         WiFi.setTxPower(WiFiTxPower);
         // update upstream DNS
-        WiFi.config(WiFi.localIP(), WiFi.gatewayIP(), WiFi.subnetMask(), primaryDNS, secondaryDNS);        
+        WiFi.config(WiFi.localIP(), WiFi.gatewayIP(), WiFi.subnetMask(), primaryDNS, secondaryDNS);
     }
 }
 

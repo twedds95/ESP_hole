@@ -12,17 +12,6 @@
 // track more domains but only show top 10 in Dashboard
 #define TOP_N 10
 
-struct DnsLogEvent
-{
-  uint32_t resolveMs;
-  uint32_t processMs;
-  bool blocked;
-  bool wasSentUpstream;
-  char domain[MAX_DOMAIN_LEN];
-  IPAddress ip;
-  char logMsg[MAX_LOG_MSG_LEN];
-};
-
 // #Persisted Stats
 #include <Preferences.h>
 #define STATS_VERSION 1 //max 255

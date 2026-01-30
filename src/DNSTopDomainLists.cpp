@@ -7,7 +7,7 @@
 // 'private':
 
 #define BLOCK_PATH "/TOP_DOMAINS_BLOCK"
-#define QUERY_PATH "/TOP_QUERY_BLOCK"
+#define QUERY_PATH "/TOP_DOMAINS_QUERY"
 
 enum class CACHED_TYPE
 {
