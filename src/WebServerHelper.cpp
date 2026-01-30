@@ -1,6 +1,5 @@
 #include <WebServerHelper.h>
 
-#include <algorithm>
 #include <ESPAsyncWebServer.h>
 #include <SPIFFS.h>
 
@@ -564,25 +563,27 @@ void handleTimeSensitiveRotations()
   hourly[currentHour].hourProcessTime = 0;
 }
 
-void appendTopArray(String &json, const std::set<DomainStat, DomainStatCompare> set)
+void appendTopArray(String &json, const std::array<const DomainStat *, TOP_N> &arr)
 {
   json += "[";
   bool first = true;
-  const auto begin = set.begin();
-  const auto end = set.size() < TOP_N ? set.end() : std::next(begin, 10);
-  for (auto it = begin; it != end; ++it)
+  for (size_t i = 0; i < TOP_N; ++i)
   {
-    if (it->count == 0)
-      continue;
+    const DomainStat *stat = arr[i];
+    if (!stat || stat->count == 0)
+      break;
+
     if (!first)
       json += ",";
     first = false;
+
     json += "{";
-    json += "\"d\":\"" + String(it->domain) + "\",";
-    json += "\"u\":" + String(it->wasSentUpstream) + ",";
-    json += "\"c\":" + String(it->count);
+    json += "\"d\":\"" + String(stat->domain) + "\",";
+    json += "\"u\":" + String(stat->wasSentUpstream) + ",";
+    json += "\"c\":" + String(stat->count);
     json += "}";
   }
+
   json += "]";
 }
 
@@ -619,9 +620,9 @@ String getJsonStats()
   // Top domains
   json += "\"top\":{";
   json += "\"queried\":";
-  appendTopArray(json, getTopQueriedSet());
+  appendTopArray(json, getTopQueriedArr());
   json += ",\"blocked\":";
-  appendTopArray(json, getTopBlockedSet());
+  appendTopArray(json, getTopBlockedArr());
   json += "}";
 
   json += "}";

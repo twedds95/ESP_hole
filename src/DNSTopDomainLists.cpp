@@ -1,5 +1,7 @@
 #include <DNSTopDomainLists.h>
 
+#include <algorithm>
+#include <vector>
 #include <SPIFFS.h>
 
 #include <EspLogs.h>
@@ -10,59 +12,61 @@ namespace
 #define BLOCK_PATH "/TOP_DOMAINS_BLOCK"
 #define QUERY_PATH "/TOP_DOMAINS_QUERY"
 
-    enum class CACHED_TYPE
-    {
-        BLOCKED,
-        QUERIED,
-    };
-
-    std::set<DomainStat, DomainStatCompare> topBlockedSet;
-    std::set<DomainStat, DomainStatCompare> topQueriedSet;
-
     std::unordered_map<std::string, DomainStat> topBlockedMap;
     std::unordered_map<std::string, DomainStat> topQueriedMap;
 
-    void getSetAndMapByType(CACHED_TYPE type,
-                            std::set<DomainStat, DomainStatCompare> *&domSet,
-                            std::unordered_map<std::string, DomainStat> *&domMap)
+    std::array<const DomainStat *, TOP_N> getTopN(const std::unordered_map<std::string, DomainStat> &map)
     {
-        switch (type)
-        {
-        case CACHED_TYPE::BLOCKED:
-            domSet = &topBlockedSet;
-            domMap = &topBlockedMap;
-            break;
+        std::array<const DomainStat *, TOP_N> top{};
+        top.fill(nullptr);
 
-        case CACHED_TYPE::QUERIED:
-            domSet = &topQueriedSet;
-            domMap = &topQueriedMap;
-            break;
-
-        default:
-            domSet = nullptr;
-            domMap = nullptr;
-        }
-        if (!domSet || !domMap)
+        for (const auto &pair : map)
         {
-            dualPrintLogf(ESPHOLE_LOGLEVEL::ERROR,
-                          ESPHOLE_LOGTYPES::STATS,
-                          "Cached type could not be determined -- Cached Lists may be corrupted.");
+            const auto &stat = pair.second;
+            if (stat.count == 0)
+                continue;
+
+            for (size_t i = 0; i < TOP_N; ++i)
+            {
+                if (!top[i] || stat.count > top[i]->count)
+                {
+                    for (size_t j = TOP_N - 1; j > i; --j)
+                        top[j] = top[j - 1];
+
+                    top[i] = &stat;
+                    break;
+                }
+            }
         }
+        return top;
     }
 
-    void decayTopDomain(CACHED_TYPE type, double_t percent, double_t totalQueries)
+    const DomainStat *getSmallestByCount(const std::unordered_map<std::string, DomainStat> &map)
     {
-        std::set<DomainStat, DomainStatCompare> *domSet = nullptr;
-        std::unordered_map<std::string, DomainStat> *domMap = nullptr;
-        getSetAndMapByType(type, domSet, domMap);
-        if (!domSet || !domMap)
+        const DomainStat *smallest = nullptr;
+
+        for (const auto &pair : map)
+        {
+            const auto &stat = pair.second;
+            if (stat.count == 0)
+                return &stat;
+
+            if (!smallest || stat.count < smallest->count)
+                smallest = &stat;
+        }
+
+        return smallest; // may be nullptr if map empty
+    }
+
+    void decayTopDomain(std::unordered_map<std::string, DomainStat> &domMap, double_t percent, double_t totalQueries)
+    {
+        if (domMap.empty())
             return;
 
-        // set elements are const, so just recreate the set since we modify everything
-        std::set<DomainStat, DomainStatCompare> tempSet;
-        tempSet.swap(*domSet);
-        for (const auto &tempStat : tempSet)
+        std::vector<std::string> domainsToErase;
+        for (const auto &pair : domMap)
         {
+            const auto &tempStat = pair.second;
             if (tempStat.count <= 0)
             {
                 dualPrintLogf(ESPHOLE_LOGLEVEL::ERROR,
@@ -78,25 +82,20 @@ namespace
             double_t domPercentEstimate = (double_t)tempStat.count / totalQueries;
             uint32_t decayAmount = (uint32_t)(domPercentEstimate * percent * tempStat.count);
             stat.count = tempStat.count - decayAmount;
-            if (stat.count > 0)
+            if (stat.count <= 0)
             {
-                domSet->insert(stat);
+                domainsToErase.push_back(stat.domain);
             }
-            else
-            {
-                domMap->erase(stat.domain);
-            }
+        }
+
+        for (const auto &domain : domainsToErase)
+        {
+            domMap.erase(domain);
         }
     }
 
-    void updateTop(CACHED_TYPE type, const char *dom, bool wasSentUpstream, IPAddress ip = IPAddress(0, 0, 0, 0))
+    void updateTop(std::unordered_map<std::string, DomainStat> &domMap, const char *dom, bool wasSentUpstream, IPAddress ip = IPAddress(0, 0, 0, 0))
     {
-        std::set<DomainStat, DomainStatCompare> *domSet = nullptr;
-        std::unordered_map<std::string, DomainStat> *domMap = nullptr;
-        getSetAndMapByType(type, domSet, domMap);
-        if (!domSet || !domMap)
-            return;
-
         char domain[MAX_DOMAIN_LEN];
         sanitizeDomain(dom, domain);
 
@@ -107,53 +106,45 @@ namespace
         strncpy(stat.ip, ip.toString().c_str(), MAX_IP_LEN);
 
         // Check if exists
-        auto it = domMap->find(domain);
-        if (it != domMap->end())
+        auto it = domMap.find(domain);
+        if (it != domMap.end())
         {
-            domSet->erase(it->second);
             stat.count = it->second.count + 1;
             // cached items are not sent upstream so keep initial flag from first call
             stat.wasSentUpstream = it->second.wasSentUpstream;
-            domSet->insert(stat);
             it->second.count++;
             return;
         }
 
         // Check room for tracking
-        if (domSet->size() >= TOP_N_TRACKED)
+        if (domMap.size() >= TOP_N_TRACKED)
         {
-            auto smallest = domSet->end();
-            domMap->erase(smallest->domain);
-            domSet->erase(smallest);
+            auto smallest = getSmallestByCount(domMap);
+            domMap.erase(smallest->domain);
         }
 
-        domSet->insert(stat);
-        (*domMap)[stat.domain] = stat;
+        domMap[stat.domain] = stat;
     }
 
-    bool removeFromTopList(CACHED_TYPE type, const char *dom)
+    bool removeFromTopList(std::unordered_map<std::string, DomainStat> &domMap, const char *dom)
     {
-        std::set<DomainStat, DomainStatCompare> *domSet = nullptr;
-        std::unordered_map<std::string, DomainStat> *domMap = nullptr;
-        getSetAndMapByType(type, domSet, domMap);
-        if (!domSet || !domMap)
+        if (domMap.empty())
             return false;
 
         char domain[MAX_DOMAIN_LEN];
         sanitizeDomain(dom, domain);
         // Check if exists
-        auto it = domMap->find(domain);
-        if (it != domMap->end())
+        auto it = domMap.find(domain);
+        if (it != domMap.end())
         {
-            domSet->erase(it->second);
-            domMap->erase(domain);
+            domMap.erase(domain);
             return true;
         }
 
         return false;
     }
 
-    void saveTopStats(const char *path, const std::set<DomainStat, DomainStatCompare> set)
+    void saveTopStats(const char *path, const std::unordered_map<std::string, DomainStat> map)
     {
         File f = SPIFFS.open(String(path) + ".tmp", FILE_WRITE);
         if (!f)
@@ -168,13 +159,14 @@ namespace
         TopStatsHeader hdr{
             TOP_STATS_MAGIC,
             TOP_STATS_VERSION,
-            (uint16_t)set.size()};
+            (uint16_t)map.size()};
 
         f.write((uint8_t *)&hdr, sizeof(hdr));
 
-        for (const auto &entry : set)
+        for (const auto &pair : map)
         {
-            f.write((uint8_t *)&entry, sizeof(DomainStat));
+            const auto &stat = pair.second;
+            f.write((uint8_t *)&stat, sizeof(DomainStat));
         }
 
         f.close();
@@ -183,10 +175,10 @@ namespace
         dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
                       ESPHOLE_LOGTYPES::STATS,
                       "Cached Top %d Domains to %s SPIFFS File",
-                      set.size(), path);
+                      map.size(), path);
     }
 
-    bool loadCachedTopStats(const char *path, CACHED_TYPE type)
+    bool loadCachedTopStats(const char *path, std::unordered_map<std::string, DomainStat> &domMap)
     {
         File f = SPIFFS.open(path, FILE_READ);
         if (!f)
@@ -220,14 +212,7 @@ namespace
             return false;
         }
 
-        std::set<DomainStat, DomainStatCompare> *domSet = nullptr;
-        std::unordered_map<std::string, DomainStat> *domMap = nullptr;
-        getSetAndMapByType(type, domSet, domMap);
-        if (!domSet || !domMap)
-            return false;
-
-        domSet->clear();
-        domMap->clear();
+        domMap.clear();
 
         DomainStat tmp;
         size_t count = min((size_t)hdr.numTracked, (size_t)TOP_N_TRACKED);
@@ -236,27 +221,27 @@ namespace
         {
             if (f.read((uint8_t *)&tmp, sizeof(tmp)) != sizeof(tmp))
                 break;
-            domSet->insert(tmp);
-            (*domMap)[tmp.domain] = tmp;
+            domMap[tmp.domain] = tmp;
         }
 
         dualPrintLogf(ESPHOLE_LOGLEVEL::INFO,
                       ESPHOLE_LOGTYPES::STATS,
                       "Loaded Top %d Cached Domains from %s",
-                      domSet->size(), path);
+                      domMap.size(), path);
         f.close();
         return true;
     }
+
 }
 
-const std::set<DomainStat, DomainStatCompare> &getTopBlockedSet()
+const std::array<const DomainStat *, TOP_N> getTopBlockedArr()
 {
-    return topBlockedSet;
+    return getTopN(topBlockedMap);
 }
 
-const std::set<DomainStat, DomainStatCompare> &getTopQueriedSet()
+const std::array<const DomainStat *, TOP_N> getTopQueriedArr()
 {
-    return topQueriedSet;
+    return getTopN(topQueriedMap);
 }
 
 const std::unordered_map<std::string, DomainStat> &getTopBlockedMap()
@@ -271,24 +256,24 @@ const std::unordered_map<std::string, DomainStat> &getTopQueriedMap()
 
 void saveTopStats()
 {
-    saveTopStats(BLOCK_PATH, topBlockedSet);
-    saveTopStats(QUERY_PATH, topQueriedSet);
+    saveTopStats(BLOCK_PATH, topBlockedMap);
+    saveTopStats(QUERY_PATH, topQueriedMap);
 }
 
 void loadCachedTopStats()
 {
-    if (!loadCachedTopStats(BLOCK_PATH, CACHED_TYPE::BLOCKED))
+    if (!loadCachedTopStats(BLOCK_PATH, topBlockedMap))
     {
         dualPrintLogf(ESPHOLE_LOGLEVEL::INFO,
                       ESPHOLE_LOGTYPES::STATS,
-                      "Cached Top Domains Not Loaded - %s SPIFFS File Not Found",
+                      "Cached Top Domains Not Loaded - %s",
                       BLOCK_PATH);
     }
-    if (!loadCachedTopStats(QUERY_PATH, CACHED_TYPE::QUERIED))
+    if (!loadCachedTopStats(QUERY_PATH, topQueriedMap))
     {
         dualPrintLogf(ESPHOLE_LOGLEVEL::INFO,
                       ESPHOLE_LOGTYPES::STATS,
-                      "Cached Top Domains Not Loaded - %s SPIFFS File Not Found",
+                      "Cached Top Domains Not Loaded - %s",
                       QUERY_PATH);
     }
 }
@@ -312,25 +297,25 @@ void sanitizeDomain(const char *in, char *domain)
 
 void decayTopDomains(double_t percent, double_t total)
 {
-    decayTopDomain(CACHED_TYPE::BLOCKED, percent, total);
-    decayTopDomain(CACHED_TYPE::QUERIED, percent, total);
+    decayTopDomain(topBlockedMap, percent, total);
+    decayTopDomain(topQueriedMap, percent, total);
 }
 
 void updateTopBlocked(const char *domain, bool wasSentUpstream)
 {
-    updateTop(CACHED_TYPE::BLOCKED, domain, wasSentUpstream);
+    updateTop(topBlockedMap, domain, wasSentUpstream);
 }
 
 void updateTopQueried(const char *domain, bool wasSentUpstream, IPAddress ip)
 {
-    updateTop(CACHED_TYPE::QUERIED, domain, wasSentUpstream, ip);
+    updateTop(topQueriedMap, domain, wasSentUpstream, ip);
 }
 
 void removeFromTopQuery(const char *dom)
 {
     char domain[MAX_DOMAIN_LEN];
     strncpy(domain, dom, MAX_DOMAIN_LEN);
-    removeFromTopList(CACHED_TYPE::QUERIED, dom)
+    removeFromTopList(topQueriedMap, dom)
         ? dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
                         ESPHOLE_LOGTYPES::STATS,
                         "Domain '%s' was removed from top queried cached list.",
@@ -345,7 +330,7 @@ void removeFromTopBlock(const char *dom)
 {
     char domain[MAX_DOMAIN_LEN];
     strncpy(domain, dom, MAX_DOMAIN_LEN);
-    removeFromTopList(CACHED_TYPE::BLOCKED, dom)
+    removeFromTopList(topBlockedMap, dom)
         ? dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
                         ESPHOLE_LOGTYPES::STATS,
                         "Domain '%s' was removed from top blocked cached list.",

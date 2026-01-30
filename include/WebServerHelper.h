@@ -2,6 +2,7 @@
 #define WEBSERVERHELPER_H
 
 #include <Arduino.h>
+#include <array>
 #include <ESPAsyncWebServer.h>
 
 #include <DNSTopDomainLists.h>
@@ -9,8 +10,6 @@
 
 
 #define HOURS 24
-// track more domains but only show top 10 in Dashboard
-#define TOP_N 10
 
 // #Persisted Stats
 #include <Preferences.h>
@@ -54,7 +53,7 @@ void savePersistedStats();
 void loadPersistedStats();
 void setupServerHelper();
 
-void appendTopArray(String &json, const std::set<DomainStat, DomainStatCompare> set);
+void appendTopArray(String &json, const std::array<const DomainStat *, TOP_N> &arr);
 String getJsonStats();
 void handleTimeSensitiveRotations();
 void recordQuery(bool blocked, const char *domain, bool wasSentUpstream, uint32_t resolveTime, uint32_t procTime, IPAddress ip);
