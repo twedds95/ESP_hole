@@ -12,15 +12,6 @@
 #define MAX_DOMAIN_LEN 96
 #define MAX_IP_LEN 16
 
-constexpr uint32_t TOP_STATS_MAGIC = 0x54535453; // 'TSTS'
-constexpr uint16_t TOP_STATS_VERSION = 2;
-
-struct TopStatsHeader {
-  uint32_t magic;
-  uint16_t version;
-  uint16_t numTracked;
-};
-
 struct DomainStat
 {
   char domain[MAX_DOMAIN_LEN];
@@ -37,7 +28,6 @@ const std::unordered_map<std::string, DomainStat> &getTopQueriedMap();
 
 void saveTopStats();
 void loadCachedTopStats();
-void sanitizeDomain(const char *dom, char *domain);
 void decayTopDomains(double_t percent, double_t total);
 void updateTopBlocked(const char *domain, bool wasSentUpstream);
 void updateTopQueried(const char *domain, bool wasSentUpstream, IPAddress ip);

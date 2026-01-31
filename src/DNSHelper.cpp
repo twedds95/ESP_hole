@@ -7,114 +7,117 @@
 #include <WebServerHelper.h>
 #include <WiFi.h>
 
-bool isEasyBlock(const char *domain)
+namespace
 {
-    static const char *patterns[] = {
-        "ad.",
-        ".ad.",
-        ".ads.",
-        "adserver.",
-        "adservers.",
-        "adtrack.",
-        "adtracker.",
-        "adservice.",
-        "adservices.",
-        "analytics.",
-        "telemetry.",
-        "tracker.",
-        "tracking.",
-        "beacon.",
-        "logging."};
-
-    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++)
+    bool isEasyBlock(const char *domain)
     {
-        if (strstr(domain, patterns[i]) != nullptr)
+        static const char *patterns[] = {
+            "ad.",
+            ".ad.",
+            ".ads.",
+            "adserver.",
+            "adservers.",
+            "adtrack.",
+            "adtracker.",
+            "adservice.",
+            "adservices.",
+            "analytics.",
+            "telemetry.",
+            "tracker.",
+            "tracking.",
+            "beacon.",
+            "logging."};
+
+        for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++)
         {
+            if (strstr(domain, patterns[i]) != nullptr)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool isBlockedOverride(const char *domain)
+    {
+        auto blockList = getBlockList();
+        return blockList.find(domain) != blockList.end();
+    }
+
+    bool isWhiteListOverride(const char *domain)
+    {
+        auto whiteList = getWhiteList();
+        return whiteList.find(domain) != whiteList.end();
+    }
+
+    bool isRewrite(const char *domain, IPAddress &ip)
+    {
+        auto rewriteRules = getRewriteRules();
+        // try exact match first
+        auto it = rewriteRules.find(domain);
+        if (it != rewriteRules.end())
+        {
+            ip = it->second;
             return true;
         }
-    }
 
-    return false;
-}
-
-bool isBlockedOverride(const char *domain)
-{
-    auto blockList = getBlockList();
-    return blockList.find(domain) != blockList.end();
-}
-
-bool isWhiteListOverride(const char *domain)
-{
-    auto whiteList = getWhiteList();
-    return whiteList.find(domain) != whiteList.end();
-}
-
-bool isRewrite(const char *domain, IPAddress &ip)
-{
-    auto rewriteRules = getRewriteRules();
-    // try exact match first
-    auto it = rewriteRules.find(domain);
-    if (it != rewriteRules.end())
-    {
-        ip = it->second;
-        return true;
-    }
-
-    // check for partial matches
-    for (auto &r : rewriteRules)
-    {
-        if (strstr(domain, r.first.c_str()) != nullptr)
+        // check for partial matches
+        for (auto &r : rewriteRules)
         {
-            ip = r.second;
+            if (strstr(domain, r.first.c_str()) != nullptr)
+            {
+                ip = r.second;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool isCached(const char *domain, IPAddress &ip)
+    {
+        auto topQueried = getTopQueriedMap();
+        auto it = topQueried.find(domain);
+        if (it != topQueried.end())
+        {
+            DomainStat &stat = it->second;
+            if (!ip.fromString(stat.ip))
+            {
+                return false;
+            }
             return true;
         }
-    }
 
-    return false;
-}
-
-bool isCached(const char *domain, IPAddress &ip)
-{
-    auto topQueried = getTopQueriedMap();
-    auto it = topQueried.find(domain);
-    if (it != topQueried.end())
-    {
-        DomainStat& stat = it->second;
-        if (!ip.fromString(stat.ip))
+        auto topBlocked = getTopBlockedMap();
+        it = topBlocked.find(domain);
+        if (it != topBlocked.end())
         {
-            return false;
+            ip = IPAddress(0, 0, 0, 0);
+            return true;
         }
-        return true;
+
+        return false;
     }
 
-    auto topBlocked = getTopBlockedMap();
-    it = topBlocked.find(domain);
-    if (it != topBlocked.end())
+    IPAddress sendUpstream(const char *dom, IPAddress &ip, uint32_t processMs, String &logMsg)
     {
-        ip = IPAddress(0, 0, 0, 0);
-        return true;
-    }
-    
-    return false;
-}
+        uint32_t oMillis = millis();
+        WiFi.hostByName(dom, ip);
+        uint32_t resolvMs = millis() - oMillis;
+        if (ip == IPAddress(0, 0, 0, 0))
+        {
+            logMsg += "Block by upstream took %lu ms";
+            enqueueDnsLog(true, dom, true, resolvMs, processMs, logMsg);
+        }
+        else
+        {
+            logMsg += "Resolve took %lu ms";
+            enqueueDnsLog(false, dom, true, resolvMs, processMs, logMsg, ip);
+        }
 
-IPAddress sendUpstream(const char *dom, IPAddress &ip, uint32_t processMs, String &logMsg)
-{
-    uint32_t oMillis = millis();
-    WiFi.hostByName(dom, ip);
-    uint32_t resolvMs = millis() - oMillis;
-    if (ip == IPAddress(0, 0, 0, 0))
-    {
-        logMsg += "Block by upstream took %lu ms";
-        enqueueDnsLog(true, dom, true, resolvMs, processMs, logMsg);
+        return ip;
     }
-    else
-    {
-        logMsg += "Resolve took %lu ms";
-        enqueueDnsLog(false, dom, true, resolvMs, processMs, logMsg, ip);
-    }
-
-    return ip;
 }
 
 IPAddress handleDNSRequest(String dom)

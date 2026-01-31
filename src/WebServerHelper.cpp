@@ -1,6 +1,7 @@
 #include <WebServerHelper.h>
 
 #include <ESPAsyncWebServer.h>
+#include <Preferences.h>
 #include <SPIFFS.h>
 
 #include <Dashboard.cpp>
@@ -9,6 +10,33 @@
 
 namespace
 {
+
+#define HOURS 24
+
+// #Persisted Stats
+#define STATS_VERSION 1 // max 255
+#define STATS_SAVE_ID "esp_hole"
+#define STATS_SAVE_KEY "stats"
+#define HOUR_SAVE_KEY "hourly"
+
+  struct HourStats
+  {
+    uint32_t queries = 0;
+    uint32_t blocked = 0;
+    uint32_t hourResponseTime = 0;
+    uint32_t hourProcessTime = 0;
+  };
+
+  struct PersistedStats
+  {
+    uint8_t version = STATS_VERSION;
+    uint32_t _totalQueries;
+    uint32_t _totalBlocked;
+    uint64_t _responseTime;
+    uint64_t _processTime;
+    uint8_t _currentHour;
+  };
+
   AsyncWebServer server(80);
 
   unsigned long lastHourTick = 0;
@@ -37,101 +65,94 @@ namespace
       {"rewrite", "/rewrite"}};
 
   const int LIST_COUNT = sizeof(lists) / sizeof(lists[0]);
-}
 
-void savePersistedStats()
-{
-  dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
-                ESPHOLE_LOGTYPES::STATS,
-                "Size of data to persist = %u",
-                sizeof(stats) + sizeof(hourly));
-  prefs.begin(STATS_SAVE_ID, false);
-  size_t written = 0;
-  written += prefs.putBytes(STATS_SAVE_KEY, &stats, sizeof(stats));
-  written += prefs.putBytes(HOUR_SAVE_KEY, hourly, sizeof(hourly));
-  prefs.end();
-  dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
-                ESPHOLE_LOGTYPES::STATS,
-                "Version %d - Persisted %u bytes (stats=%u hourly=%u)",
-                STATS_VERSION,
-                written,
-                sizeof(stats),
-                sizeof(hourly));
-}
-
-void loadPersistedStats()
-{
-  dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
-                ESPHOLE_LOGTYPES::STATS,
-                "Loading Persisted Data");
-  prefs.begin(STATS_SAVE_ID, true);
-  if (!prefs.isKey(STATS_SAVE_KEY))
+  void savePersistedStats()
   {
     dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
                   ESPHOLE_LOGTYPES::STATS,
-                  "Persisted Data: No Key - Initializing New");
-    memset(&stats, 0, sizeof(stats));
-    stats.version = STATS_VERSION;
+                  "Size of data to persist = %u",
+                  sizeof(stats) + sizeof(hourly));
+    prefs.begin(STATS_SAVE_ID, false);
+    size_t written = 0;
+    written += prefs.putBytes(STATS_SAVE_KEY, &stats, sizeof(stats));
+    written += prefs.putBytes(HOUR_SAVE_KEY, hourly, sizeof(hourly));
     prefs.end();
-    savePersistedStats();
-    return;
-  }
-
-  prefs.getBytes(STATS_SAVE_KEY, &stats, sizeof(stats));
-  if (stats.version != STATS_VERSION)
-  {
     dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
                   ESPHOLE_LOGTYPES::STATS,
-                  "Persisted Data: New Version %d, Old Version: %d",
+                  "Version %d - Persisted %u bytes (stats=%u hourly=%u)",
                   STATS_VERSION,
-                  stats.version);
-    memset(&stats, 0, sizeof(stats));
-    stats.version = STATS_VERSION;
-    prefs.clear();
-    prefs.end();
-    savePersistedStats();
-    return;
+                  written,
+                  sizeof(stats),
+                  sizeof(hourly));
   }
 
-  prefs.getBytes(HOUR_SAVE_KEY, hourly, sizeof(hourly));
-  prefs.end();
-}
-
-void handleRoot()
-{
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
-            { request->send_P(200, "text/html", DASHBOARD_HTML); });
-}
-
-void handleStats()
-{
-  server.on("/stats", HTTP_GET, [](AsyncWebServerRequest *request)
-            { request->send(200, "application/json", getJsonStats()); });
-}
-
-size_t getTotalLogSize()
-{
-  size_t total = 0;
-  for (int i = 0; i < MAX_LOGS; i++)
+  void loadPersistedStats()
   {
-    String fname = String(logName) + (i > 0 ? String(i) : String());
-    if (SPIFFS.exists(fname))
+    dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
+                  ESPHOLE_LOGTYPES::STATS,
+                  "Loading Persisted Data");
+    prefs.begin(STATS_SAVE_ID, true);
+    if (!prefs.isKey(STATS_SAVE_KEY))
     {
-      File f = SPIFFS.open(fname, FILE_READ);
-      total += f.size();
-      serialPrintLogf("[%s] getTotalLogSize: File %s has size %d\n",
-                      LOG_TAG(ESPHOLE_LOGTYPES::CODE),
-                      fname, f.size());
-      f.close();
+      dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
+                    ESPHOLE_LOGTYPES::STATS,
+                    "Persisted Data: No Key - Initializing New");
+      memset(&stats, 0, sizeof(stats));
+      stats.version = STATS_VERSION;
+      prefs.end();
+      savePersistedStats();
+      return;
     }
-  }
-  return total;
-}
 
-void handleLogs()
-{
-  server.on("/logs", HTTP_GET, [](AsyncWebServerRequest *req)
-            {
+    prefs.getBytes(STATS_SAVE_KEY, &stats, sizeof(stats));
+    if (stats.version != STATS_VERSION)
+    {
+      dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
+                    ESPHOLE_LOGTYPES::STATS,
+                    "Persisted Data: New Version %d, Old Version: %d",
+                    STATS_VERSION,
+                    stats.version);
+      memset(&stats, 0, sizeof(stats));
+      stats.version = STATS_VERSION;
+      prefs.clear();
+      prefs.end();
+      savePersistedStats();
+      return;
+    }
+
+    prefs.getBytes(HOUR_SAVE_KEY, hourly, sizeof(hourly));
+    prefs.end();
+  }
+
+  void handleRoot()
+  {
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+              { request->send_P(200, "text/html", DASHBOARD_HTML); });
+  }
+
+  size_t getTotalLogSize()
+  {
+    size_t total = 0;
+    for (int i = 0; i < MAX_LOGS; i++)
+    {
+      String fname = String(logName) + (i > 0 ? String(i) : String());
+      if (SPIFFS.exists(fname))
+      {
+        File f = SPIFFS.open(fname, FILE_READ);
+        total += f.size();
+        serialPrintLogf("[%s] getTotalLogSize: File %s has size %d\n",
+                        LOG_TAG(ESPHOLE_LOGTYPES::CODE),
+                        fname, f.size());
+        f.close();
+      }
+    }
+    return total;
+  }
+
+  void handleLogs()
+  {
+    server.on("/logs", HTTP_GET, [](AsyncWebServerRequest *req)
+              {
     size_t totalSize = getTotalLogSize();
     
     size_t limit = req->hasParam("limit") ? 
@@ -306,133 +327,119 @@ void handleLogs()
 
     res->addHeader("X-Log-Total-Size", String(totalSize));
     req->send(res); });
-}
-
-void emptyRequestHandler(AsyncWebServerRequest *request) {};
-void handleLists()
-{
-  server.on("/list/blocklist", HTTP_GET, handleGetList);
-  server.on("/list/whitelist", HTTP_GET, handleGetList);
-  server.on("/list/rewrite", HTTP_GET, handleGetList);
-
-  server.on("/list/clear/blocklist", HTTP_GET, handleClearList);
-  server.on("/list/clear/whitelist", HTTP_GET, handleClearList);
-  server.on("/list/clear/rewrite", HTTP_GET, handleClearList);
-
-  server.on("/list/blocklist", HTTP_POST, emptyRequestHandler, nullptr, handlePostList);
-  server.on("/list/whitelist", HTTP_POST, emptyRequestHandler, nullptr, handlePostList);
-  server.on("/list/rewrite", HTTP_POST, emptyRequestHandler, nullptr, handlePostList);
-}
-
-const char *getListPath(const String &name)
-{
-  for (int i = 0; i < LIST_COUNT; i++)
-  {
-    if (name == lists[i].name)
-      return lists[i].path;
-  }
-  return nullptr;
-}
-
-String getListName(AsyncWebServerRequest *req)
-{
-  String url = req->url();
-  return url.substring(url.lastIndexOf('/') + 1);
-}
-
-void handleGetList(AsyncWebServerRequest *req)
-{
-  String name = getListName(req);
-  const char *path = getListPath(name);
-
-  if (!path)
-  {
-    req->send(404, "text/plain", "Invalid list");
-    return;
   }
 
-  if (!SPIFFS.exists(path))
+  void emptyRequestHandler(AsyncWebServerRequest *request) {};
+
+  const char *getListPath(const String &name)
   {
-    req->send(200, "text/plain", "");
-    return;
+    for (int i = 0; i < LIST_COUNT; i++)
+    {
+      if (name == lists[i].name)
+        return lists[i].path;
+    }
+    return nullptr;
   }
 
-  File f = SPIFFS.open(path, FILE_READ);
-  if (!f)
+  String getListName(AsyncWebServerRequest *req)
   {
-    req->send(500, "text/plain", "File open failed");
-    return;
+    String url = req->url();
+    return url.substring(url.lastIndexOf('/') + 1);
   }
 
-  AsyncWebServerResponse *res =
-      req->beginResponse(f, "text/plain");
-
-  res->addHeader("Cache-Control", "no-store");
-  req->send(res);
-}
-
-void reloadLists()
-{
-  setupDNSLists();
-}
-
-void handleClearList(AsyncWebServerRequest *req)
-{
-  String name = getListName(req);
-  const char *path = getListPath(name);
-
-  if (!path)
+  void handleGetList(AsyncWebServerRequest *req)
   {
-    req->send(404, "text/plain", "Invalid list");
-    return;
+    String name = getListName(req);
+    const char *path = getListPath(name);
+
+    if (!path)
+    {
+      req->send(404, "text/plain", "Invalid list");
+      return;
+    }
+
+    if (!SPIFFS.exists(path))
+    {
+      req->send(200, "text/plain", "");
+      return;
+    }
+
+    File f = SPIFFS.open(path, FILE_READ);
+    if (!f)
+    {
+      req->send(500, "text/plain", "File open failed");
+      return;
+    }
+
+    AsyncWebServerResponse *res =
+        req->beginResponse(f, "text/plain");
+
+    res->addHeader("Cache-Control", "no-store");
+    req->send(res);
   }
 
-  SPIFFS.remove(path);
-  reloadLists();
-  req->send(200, "text/plain", "List cleared");
-  dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
-                ESPHOLE_LOGTYPES::STATS,
-                "List %s has been cleared.",
-                name);
-}
-
-void handlePostList(AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t index, size_t total)
-{
-  if (index != 0)
-    return;
-
-  String name = getListName(req);
-  const char *path = getListPath(name);
-
-  if (!path)
+  void reloadLists()
   {
-    req->send(404, "text/plain", "Invalid list");
-    return;
+    setupDNSLists();
   }
 
-  const char *tmp = "/tmp_list.txt";
-
-  File f = SPIFFS.open(tmp, "w");
-  if (!f)
+  void handleClearList(AsyncWebServerRequest *req)
   {
-    req->send(500, "text/plain", "Temp open failed");
-    return;
+    String name = getListName(req);
+    const char *path = getListPath(name);
+
+    if (!path)
+    {
+      req->send(404, "text/plain", "Invalid list");
+      return;
+    }
+
+    SPIFFS.remove(path);
+    reloadLists();
+    req->send(200, "text/plain", "List cleared");
+    dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
+                  ESPHOLE_LOGTYPES::STATS,
+                  "List %s has been cleared.",
+                  name);
   }
 
-  f.write(data, total);
-  f.close();
+  void handlePostList(AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t index, size_t total)
+  {
+    if (index != 0)
+      return;
 
-  SPIFFS.remove(path);
-  SPIFFS.rename(tmp, path);
+    String name = getListName(req);
+    const char *path = getListPath(name);
 
-  reloadLists();
-  req->send(200, "text/plain", "OK");
-}
+    if (!path)
+    {
+      req->send(404, "text/plain", "Invalid list");
+      return;
+    }
 
-void handleWhitelistAdds()
-{
-  server.on("/whitelist/add", HTTP_POST, [](AsyncWebServerRequest *req)
-            {
+    const char *tmp = "/tmp_list.txt";
+
+    File f = SPIFFS.open(tmp, "w");
+    if (!f)
+    {
+      req->send(500, "text/plain", "Temp open failed");
+      return;
+    }
+
+    f.write(data, total);
+    f.close();
+
+    SPIFFS.remove(path);
+    SPIFFS.rename(tmp, path);
+
+    reloadLists();
+    req->send(200, "text/plain", "OK");
+  }
+
+  void handleWhitelistAdds()
+  {
+    server.on("/whitelist/add", HTTP_POST, [](AsyncWebServerRequest *req)
+              {
       if (!req->hasParam("domain", true)) {
         req->send(400, "text/plain", "Missing domain");
         return;
@@ -450,12 +457,12 @@ void handleWhitelistAdds()
       else {
         req->send(500, "text/plain", "Error updating rewrite list");
       } });
-}
+  }
 
-void handleBlocklistAdds()
-{
-  server.on("/blocklist/add", HTTP_POST, [](AsyncWebServerRequest *req)
-            {
+  void handleBlocklistAdds()
+  {
+    server.on("/blocklist/add", HTTP_POST, [](AsyncWebServerRequest *req)
+              {
       if (!req->hasParam("domain", true)) {
         req->send(400, "text/plain", "Missing domain");
         return;
@@ -473,12 +480,12 @@ void handleBlocklistAdds()
       else {
         req->send(500, "text/plain", "Error updating block list");
       } });
-}
+  }
 
-void handleRewriteAdds()
-{
-  server.on("/rewrite/add", HTTP_POST, [](AsyncWebServerRequest *req)
-            {
+  void handleRewriteAdds()
+  {
+    server.on("/rewrite/add", HTTP_POST, [](AsyncWebServerRequest *req)
+              {
       if (!req->hasParam("domain", true)) {
         req->send(400, "text/plain", "Missing domain");
         return;
@@ -502,14 +509,107 @@ void handleRewriteAdds()
       else {
         req->send(500, "text/plain", "Error updating rewrite list");
       } });
-}
+  }
 
-void handleListUpdates()
-{
-  handleWhitelistAdds();
-  handleBlocklistAdds();
-  handleRewriteAdds();
-  handleLists();
+  void handleLists()
+  {
+    server.on("/list/blocklist", HTTP_GET, handleGetList);
+    server.on("/list/whitelist", HTTP_GET, handleGetList);
+    server.on("/list/rewrite", HTTP_GET, handleGetList);
+
+    server.on("/list/clear/blocklist", HTTP_GET, handleClearList);
+    server.on("/list/clear/whitelist", HTTP_GET, handleClearList);
+    server.on("/list/clear/rewrite", HTTP_GET, handleClearList);
+
+    server.on("/list/blocklist", HTTP_POST, emptyRequestHandler, nullptr, handlePostList);
+    server.on("/list/whitelist", HTTP_POST, emptyRequestHandler, nullptr, handlePostList);
+    server.on("/list/rewrite", HTTP_POST, emptyRequestHandler, nullptr, handlePostList);
+  }
+
+  void handleListUpdates()
+  {
+    handleWhitelistAdds();
+    handleBlocklistAdds();
+    handleRewriteAdds();
+    handleLists();
+  }
+
+  void appendTopArray(String &json, const std::array<const DomainStat *, TOP_N> &arr)
+  {
+    json += "[";
+    bool first = true;
+    for (size_t i = 0; i < TOP_N; ++i)
+    {
+      const DomainStat *stat = arr[i];
+      if (!stat || stat->count == 0)
+        break;
+
+      if (!first)
+        json += ",";
+      first = false;
+
+      json += "{";
+      json += "\"d\":\"" + String(stat->domain) + "\",";
+      json += "\"u\":" + String(stat->wasSentUpstream) + ",";
+      json += "\"c\":" + String(stat->count);
+      json += "}";
+    }
+
+    json += "]";
+  }
+
+  String getJsonStats()
+  {
+    String json = "{";
+
+    json += "\"total\":" + String(totalQueries) + ",";
+    json += "\"blocked\":" + String(totalBlocked) + ",";
+    json += "\"responseTime\":" + String(totalResponseTime) + ",";
+    json += "\"processTime\":" + String(totalAddedTime) + ",";
+
+    // Memory
+    json += "\"heap\":{";
+    json += "\"free\":" + String(ESP.getFreeHeap()) + ",";
+    json += "\"min\":" + String(ESP.getMinFreeHeap());
+    json += "},";
+
+    // Hourly
+    json += "\"hours\":[";
+    for (int i = 0; i < HOURS; i++)
+    {
+      int idx = (currentHour + i + 1) % HOURS;
+      json += "{";
+      json += "\"q\":" + String(hourly[idx].queries) + ",";
+      json += "\"b\":" + String(hourly[idx].blocked) + ",";
+      json += "\"t\":" + String(hourly[idx].hourResponseTime);
+      json += "}";
+      if (i < HOURS - 1)
+        json += ",";
+    }
+    json += "],";
+
+    // Top domains
+    json += "\"top\":{";
+    json += "\"queried\":";
+    appendTopArray(json, getTopQueriedArr());
+    json += ",\"blocked\":";
+    appendTopArray(json, getTopBlockedArr());
+    json += "}";
+
+    json += "}";
+
+    // This one is too big / too often to send to logs, just use Serial
+    serialPrintLogf("[%s] Sending JSON to Dashboard:\n %s\n",
+                    LOG_TAG(ESPHOLE_LOGTYPES::STATS), json.c_str());
+
+    return json;
+  }
+
+  void handleStats()
+  {
+    server.on("/stats", HTTP_GET, [](AsyncWebServerRequest *request)
+              { request->send(200, "application/json", getJsonStats()); });
+  }
 }
 
 void setupServerHelper()
@@ -561,77 +661,6 @@ void handleTimeSensitiveRotations()
   hourly[currentHour].blocked = 0;
   hourly[currentHour].hourResponseTime = 0;
   hourly[currentHour].hourProcessTime = 0;
-}
-
-void appendTopArray(String &json, const std::array<const DomainStat *, TOP_N> &arr)
-{
-  json += "[";
-  bool first = true;
-  for (size_t i = 0; i < TOP_N; ++i)
-  {
-    const DomainStat *stat = arr[i];
-    if (!stat || stat->count == 0)
-      break;
-
-    if (!first)
-      json += ",";
-    first = false;
-
-    json += "{";
-    json += "\"d\":\"" + String(stat->domain) + "\",";
-    json += "\"u\":" + String(stat->wasSentUpstream) + ",";
-    json += "\"c\":" + String(stat->count);
-    json += "}";
-  }
-
-  json += "]";
-}
-
-String getJsonStats()
-{
-  String json = "{";
-
-  json += "\"total\":" + String(totalQueries) + ",";
-  json += "\"blocked\":" + String(totalBlocked) + ",";
-  json += "\"responseTime\":" + String(totalResponseTime) + ",";
-  json += "\"processTime\":" + String(totalAddedTime) + ",";
-
-  // Memory
-  json += "\"heap\":{";
-  json += "\"free\":" + String(ESP.getFreeHeap()) + ",";
-  json += "\"min\":" + String(ESP.getMinFreeHeap());
-  json += "},";
-
-  // Hourly
-  json += "\"hours\":[";
-  for (int i = 0; i < HOURS; i++)
-  {
-    int idx = (currentHour + i + 1) % HOURS;
-    json += "{";
-    json += "\"q\":" + String(hourly[idx].queries) + ",";
-    json += "\"b\":" + String(hourly[idx].blocked) + ",";
-    json += "\"t\":" + String(hourly[idx].hourResponseTime);
-    json += "}";
-    if (i < HOURS - 1)
-      json += ",";
-  }
-  json += "],";
-
-  // Top domains
-  json += "\"top\":{";
-  json += "\"queried\":";
-  appendTopArray(json, getTopQueriedArr());
-  json += ",\"blocked\":";
-  appendTopArray(json, getTopBlockedArr());
-  json += "}";
-
-  json += "}";
-
-  // This one is too big / too often to send to logs, just use Serial
-  serialPrintLogf("[%s] Sending JSON to Dashboard:\n %s\n",
-                  LOG_TAG(ESPHOLE_LOGTYPES::STATS), json.c_str());
-
-  return json;
 }
 
 void recordQuery(bool blocked, const char *domain, bool wasSentUpstream, uint32_t resolveTime, uint32_t procTime, IPAddress ip)

@@ -40,7 +40,6 @@ enum class ESPHOLE_LOGLEVEL : uint8_t
 #define serialPrintLogf(...) do { if (SERIAL_DEBUG) Serial.printf(__VA_ARGS__); } while (0)
 
 void dualPrintLogf(ESPHOLE_LOGLEVEL logLevel, ESPHOLE_LOGTYPES tagEnum, const char *fmt, ...);
-File rollLog();
 void setupLogs(ESPHOLE_LOGLEVEL lvl);
 
 #endif //ESPLOGS_H

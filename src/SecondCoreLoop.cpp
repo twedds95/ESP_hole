@@ -5,19 +5,59 @@
 #include <ESPLogs.h>
 #include <WebServerHelper.h>
 
-QueueHandle_t dnsLogQueue;
-
-struct DnsLogEvent
+namespace
 {
-  uint32_t resolveMs;
-  uint32_t processMs;
-  bool blocked;
-  bool wasSentUpstream;
-  char domain[MAX_DOMAIN_LEN];
-  IPAddress ip;
-  char logMsg[MAX_LOG_MSG_LEN];
-};
+    QueueHandle_t dnsLogQueue;
 
+    struct DnsLogEvent
+    {
+        uint32_t resolveMs;
+        uint32_t processMs;
+        bool blocked;
+        bool wasSentUpstream;
+        char domain[MAX_DOMAIN_LEN];
+        IPAddress ip;
+        char logMsg[MAX_LOG_MSG_LEN];
+    };
+
+    void secondLoopTask(void *arg)
+    {
+        DnsLogEvent ev;
+
+        for (;;)
+        {
+            handleTimeSensitiveRotations();
+            handleTimedBloomMsg();
+            if (xQueueReceive(dnsLogQueue, &ev, portMAX_DELAY))
+            {
+                recordQuery(ev.blocked, ev.domain, ev.wasSentUpstream, ev.resolveMs, ev.processMs, ev.ip);
+
+                if (ev.wasSentUpstream)
+                {
+                    char buffer[MAX_LOG_MSG_LEN];
+                    strncpy(buffer, ev.logMsg, sizeof(buffer) - 1);
+                    strncat(buffer, " | Bloom check took %lu ms", sizeof(buffer) - strlen(buffer) - 1);
+                    dualPrintLogf(ESPHOLE_LOGLEVEL::INFO,
+                                  ESPHOLE_LOGTYPES::DNS,
+                                  buffer,
+                                  ev.domain,
+                                  ev.ip.toString().c_str(),
+                                  ev.resolveMs,
+                                  ev.processMs);
+                }
+                else
+                {
+                    dualPrintLogf(ESPHOLE_LOGLEVEL::INFO,
+                                  ESPHOLE_LOGTYPES::DNS,
+                                  ev.logMsg,
+                                  ev.domain,
+                                  ev.ip.toString().c_str(),
+                                  ev.resolveMs);
+                }
+            }
+        }
+    }
+}
 
 void setupSecondaryLoop()
 {
@@ -32,44 +72,6 @@ void setupSecondaryLoop()
         nullptr,
         0 // core 0 (DNS usually runs on core 1)
     );
-}
-
-void secondLoopTask(void *arg)
-{
-    DnsLogEvent ev;
-
-    for (;;)
-    {
-        handleTimeSensitiveRotations();
-        handleTimedBloomMsg();
-        if (xQueueReceive(dnsLogQueue, &ev, portMAX_DELAY))
-        {
-            recordQuery(ev.blocked, ev.domain, ev.wasSentUpstream, ev.resolveMs, ev.processMs, ev.ip);
-
-            if (ev.wasSentUpstream)
-            {
-                char buffer[MAX_LOG_MSG_LEN];
-                strncpy(buffer, ev.logMsg, sizeof(buffer) - 1);
-                strncat(buffer, " | Bloom check took %lu ms", sizeof(buffer) - strlen(buffer) - 1);
-                dualPrintLogf(ESPHOLE_LOGLEVEL::INFO,
-                              ESPHOLE_LOGTYPES::DNS,
-                              buffer,
-                              ev.domain,
-                              ev.ip.toString().c_str(),
-                              ev.resolveMs,
-                              ev.processMs);
-            }
-            else
-            {
-                dualPrintLogf(ESPHOLE_LOGLEVEL::INFO,
-                              ESPHOLE_LOGTYPES::DNS,
-                              ev.logMsg,
-                              ev.domain,
-                              ev.ip.toString().c_str(),
-                              ev.resolveMs);
-            }
-        }
-    }
 }
 
 void enqueueDnsLog(bool blocked,

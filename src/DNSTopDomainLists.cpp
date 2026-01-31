@@ -12,6 +12,16 @@ namespace
 #define BLOCK_PATH "/TOP_DOMAINS_BLOCK"
 #define QUERY_PATH "/TOP_DOMAINS_QUERY"
 
+    constexpr uint32_t TOP_STATS_MAGIC = 0x54535453; // 'TSTS'
+    constexpr uint16_t TOP_STATS_VERSION = 2;
+
+    struct TopStatsHeader
+    {
+        uint32_t magic;
+        uint16_t version;
+        uint16_t numTracked;
+    };
+
     std::unordered_map<std::string, DomainStat> topBlockedMap;
     std::unordered_map<std::string, DomainStat> topQueriedMap;
 
@@ -56,6 +66,23 @@ namespace
         }
 
         return smallest; // may be nullptr if map empty
+    }
+
+    void sanitizeDomain(const char *in, char *domain)
+    {
+        size_t used = 0;
+        while (*in && used + 1 < MAX_DOMAIN_LEN)
+        {
+            char c = *in++;
+            if ((c >= 'a' && c <= 'z') ||
+                (c >= '0' && c <= '9') ||
+                c == '-' || c == '.')
+            {
+                domain[used++] = c;
+            }
+        }
+
+        domain[used] = '\0';
     }
 
     void decayTopDomain(std::unordered_map<std::string, DomainStat> &domMap, double_t percent, double_t totalQueries)
@@ -276,23 +303,6 @@ void loadCachedTopStats()
                       "Cached Top Domains Not Loaded - %s",
                       QUERY_PATH);
     }
-}
-
-void sanitizeDomain(const char *in, char *domain)
-{
-    size_t used = 0;
-    while (*in && used + 1 < MAX_DOMAIN_LEN)
-    {
-        char c = *in++;
-        if ((c >= 'a' && c <= 'z') ||
-            (c >= '0' && c <= '9') ||
-            c == '-' || c == '.')
-        {
-            domain[used++] = c;
-        }
-    }
-
-    domain[used] = '\0';
 }
 
 void decayTopDomains(double_t percent, double_t total)
