@@ -6,123 +6,191 @@
 
 namespace
 {
+#define BLOOM_BITS 12500000
+#define BLOOM_HASHES 6
 
-#define BLOOM_PAGE_SIZE 4096
-#define BLOOM_CACHE_PAGES 2 // 8 KB total RAM
+#define BITS_PER_FILE 125000
+#define BYTES_PER_FILE ((BITS_PER_FILE + 7) / 8)
+
+#define TOTAL_BLOOM_PAGES ((BLOOM_BITS + BITS_PER_FILE - 1) / BITS_PER_FILE)
+#define BLOOM_MAX_OPEN 4 // max open bloom files
+
+#define HASH_VALUE 0x9747b28c
 
   struct BloomPage
   {
-    uint32_t pageIndex;
-    bool valid;
+    bool open;
+    uint16_t pageIndex;
     uint32_t lastUse;
-    uint8_t data[BLOOM_PAGE_SIZE];
+    File file;
   };
 
-  BloomPage bloomCache[BLOOM_CACHE_PAGES];
-  File bloomFile;
+  BloomPage pages[BLOOM_MAX_OPEN];
 
   // for debugging
   uint32_t bloomMisses = 0;
   uint32_t bloomQueries = 0;
   unsigned long lastMsgTick = 0;
 
-  uint8_t *getBloomPage(uint32_t pageIndex)
+  int findOpenPage(uint16_t pageIndex)
   {
-    uint32_t now = millis();
-    for (int i = 0; i < BLOOM_CACHE_PAGES; i++)
+    for (int i = 0; i < BLOOM_MAX_OPEN; i++)
     {
-      if (bloomCache[i].valid && bloomCache[i].pageIndex == pageIndex)
-      {
-        bloomCache[i].lastUse = now;
-        return bloomCache[i].data;
-      }
+      if (pages[i].open && pages[i].pageIndex == pageIndex)
+        return i;
     }
+    return -1;
+  }
 
-    bloomMisses++;
+  int findLRUVictim()
+  {
     int victim = 0;
-    for (int i = 1; i < BLOOM_CACHE_PAGES; i++)
+    uint32_t oldest = pages[0].lastUse;
+
+    for (int i = 1; i < BLOOM_MAX_OPEN; i++)
     {
-      if (!bloomCache[i].valid ||
-          bloomCache[i].lastUse < bloomCache[victim].lastUse)
+      if (!pages[i].open)
+        return i; // free slot
+      if (pages[i].lastUse < oldest)
       {
+        oldest = pages[i].lastUse;
         victim = i;
       }
     }
+    return victim;
+  }
 
-    uint32_t offset = pageIndex * BLOOM_PAGE_SIZE;
-    bloomFile.seek(offset);
+  BloomPage *getBloomPage(uint16_t pageIndex, bool openOnly)
+  {
+    uint32_t now = millis();
 
-    size_t read = bloomFile.read(
-        bloomCache[victim].data,
-        BLOOM_PAGE_SIZE);
-
-    if (read != BLOOM_PAGE_SIZE)
+    int idx = findOpenPage(pageIndex);
+    if (idx >= 0)
     {
-      memset(bloomCache[victim].data + read, 0,
-             BLOOM_PAGE_SIZE - read);
+      pages[idx].lastUse = now;
+      return &pages[idx];
     }
 
-    bloomCache[victim].pageIndex = pageIndex;
-    bloomCache[victim].valid = true;
-    bloomCache[victim].lastUse = now;
+    if (openOnly)
+      return nullptr;
 
-    return bloomCache[victim].data;
+    int victim = findLRUVictim();
+
+    if (pages[victim].open)
+      pages[victim].file.close();
+
+    char path[32];
+    snprintf(path, sizeof(path), "/bloom%u.bin", pageIndex);
+
+    File f = SPIFFS.open(path, FILE_READ);
+    if (!f)
+    {
+      dualPrintLogf(ESPHOLE_LOGLEVEL::ERROR, ESPHOLE_LOGTYPES::BLOOM,
+                    "Bloom filter %s could not be opened, bloom bin may be missing or corrupted.",
+                    path);
+      return nullptr;
+    }
+
+    pages[victim] = {
+        .open = true,
+        .pageIndex = pageIndex,
+        .lastUse = now,
+        .file = f};
+
+    return &pages[victim];
   }
-}
 
-static uint32_t bloomHash(const char *s, uint32_t seed)
-{
-  uint32_t h = seed;
-  while (*s)
+  uint32_t bloomHash(const char *s, uint32_t seed)
   {
-    h ^= (uint8_t)*s++;
-    h *= 0x5bd1e995;
-    h ^= h >> 15;
-  }
+    uint32_t h = seed;
+    while (*s)
+    {
+      h ^= (uint8_t)*s++;
+      h *= 0x5bd1e995;
+      h ^= h >> 15;
+    }
 
-  return h;
+    return h;
+  }
 }
 
 bool bloomCheck(const char *domain)
 {
-  if (!bloomFile)
-    return false;
-
   bloomQueries++;
-  for (uint32_t i = 0; i < BLOOM_HASHES; i++)
+  for (int pass = 0; pass < 2; pass++)
   {
-    uint32_t h = bloomHash(domain, 0x9747b28c + i);
-    uint32_t bit = h % BLOOM_BITS;
-    uint32_t byteIndex = bit >> 3;
-    uint32_t pageIndex = byteIndex / BLOOM_PAGE_SIZE;
-    uint32_t pageOff = byteIndex % BLOOM_PAGE_SIZE;
-
-    uint8_t *page = getBloomPage(pageIndex);
-    uint8_t mask = 1 << (bit & 7);
-
-    if ((page[pageOff] & mask) == 0)
+    bool openOnly = (pass == 0);
+    bool miss = false;
+    for (uint32_t i = 0; i < BLOOM_HASHES; i++)
     {
-      return false; // definitely not blocked
+      uint32_t h = bloomHash(domain, HASH_VALUE + i);
+      uint32_t bit = h % BLOOM_BITS;
+      uint32_t byteIndex = bit >> 3;
+      uint32_t pageIndex = byteIndex / BYTES_PER_FILE;
+      uint32_t t_ = micros();
+      BloomPage *p = getBloomPage(pageIndex, openOnly);
+      uint32_t t_page = micros();
+      serialPrintLogf("[%s] pageIndex = %lu getBloomPage=%lu us\n",
+                      LOG_TAG(ESPHOLE_LOGTYPES::BLOOM),
+                      pageIndex, t_page - t_);
+      if (!p)
+      {
+        miss = true;
+        continue;
+      }
+
+      uint32_t pageOff = byteIndex % BYTES_PER_FILE;
+      uint32_t t0 = micros();
+      p->file.seek(pageOff);
+      uint32_t t1 = micros();
+      uint8_t b = p->file.read();
+      uint32_t t2 = micros();
+      serialPrintLogf("[%s] offset=%lu seek=%lu us read=%lu us\n",
+                      LOG_TAG(ESPHOLE_LOGTYPES::BLOOM),
+                      pageOff, t1 - t0, t2 - t1);
+      uint8_t mask = 1 << (bit & 7);
+      if ((b & mask) == 0)
+        return false; // definitely not blocked
     }
+
+    if (!miss)
+      return true; // all bits found in this pass
   }
 
-  return true; // maybe blocked
+  bloomMisses++; // need to close and load more pages
+  return true;
 }
 
 void setupBloom()
 {
-  bloomFile = SPIFFS.open("/bloom.bin", FILE_READ);
-  if (!bloomFile)
+  for (int i = 0; i < BLOOM_MAX_OPEN; i++)
   {
-    dualPrintLogf(ESPHOLE_LOGLEVEL::ERROR, ESPHOLE_LOGTYPES::BLOOM, "Bloom filter not found!");
+    pages[i].open = false;
   }
-  else
+
+  for (int i = 0; i < int(TOTAL_BLOOM_PAGES); i++)
   {
-    for (int i = 0; i < BLOOM_CACHE_PAGES; i++)
+    String bloomFileName = String("/bloom") + String(i) + String(".bin");
+    if (!SPIFFS.exists(bloomFileName))
     {
-      bloomCache[i].valid = false;
+      dualPrintLogf(ESPHOLE_LOGLEVEL::ERROR, ESPHOLE_LOGTYPES::BLOOM,
+                    "Bloom filter %s not found!",
+                    bloomFileName);
     }
-    dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG, ESPHOLE_LOGTYPES::BLOOM, "Bloom filter loaded");
+    else
+    {
+      dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG, ESPHOLE_LOGTYPES::BLOOM,
+                    "Bloom filter %s loaded",
+                    bloomFileName);
+    }
+  }
+
+  for (int i = 0; i < BLOOM_HASHES; i++)
+  {
+    uint32_t h = bloomHash("google.com", HASH_VALUE + i) % BLOOM_BITS;
+    dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG, ESPHOLE_LOGTYPES::BLOOM,
+                  "%d bit=%u page=%u off=%u",
+                  i, h, h / BITS_PER_FILE, h % BITS_PER_FILE);
   }
 }
 
