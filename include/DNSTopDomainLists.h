@@ -8,7 +8,7 @@
 
 // track more domains but only show top 10 in Dashboard
 #define TOP_N 10
-#define TOP_N_TRACKED 1000
+#define TOP_N_TRACKED 100
 #define MAX_DOMAIN_LEN 96
 #define MAX_IP_LEN 16
 
