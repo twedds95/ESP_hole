@@ -30,7 +30,7 @@ Script Output:
     Bloom built: 421976 domains
     Size: 1525.9 KB
 
-This downloads the hosts file and saves it in different files in the **data_doms** directory. The script then calls **utils/generate_bloom.py** and generates **bloom.bin** in the **data** directory. Depending on the number of domains you are aiming to block, you should modify the *BITS* and *HASHES* arguments in the **utils/generate_bloom.py** file to minimize the number of false positives your DNS server will block, while also trying to minimize processing time (the script will also update the CONSTANT values in the ESP code to match the hashing functions). The way a bloom filter works is it allows for false positives but no false negatives. Therefore, all domains that are included in your lists will always be blocked, but there is also a chance that some not included domains can also get blocked. 
+This downloads the hosts file and saves it in different files in the **data_doms** directory. The script then calls **utils/generate_bloom.py** and generates **bloom*n*.bin** in the **data** directory. Depending on the number of domains you are aiming to block, you should modify the *BITS* and *HASHES* arguments in the **utils/generate_bloom.py** file to minimize the number of false positives your DNS server will block, while also trying to minimize processing time (the script will also update the CONSTANT values in the ESP code to match the hashing functions). The way a bloom filter works is it allows for false positives but no false negatives. Therefore, all domains that are included in your lists will always be blocked, but there is also a chance that some not included domains can also get blocked. 
 
 You can run a quick estimate before processing your lists to help you tweak the *BITS* and *HASHES* and make sure the percentage of false positives is acceptable for you by running **utils/estimate_false_positive.py**.
 
@@ -54,7 +54,7 @@ A **rewrite** file can also be added in the **data** folder if you wish to add s
 
 ### Upload the SPIFFS
 
-Upload the **bloom.bin** and (optional) **rewrite** files to the ESP. This is trivial with the PIO extension. But follow [this guide](https://randomnerdtutorials.com/esp32-vs-code-platformio-spiffs/) if you have issues. Make sure to research your board to determine its specific capacity. 
+Upload the **bloom*n*.bin** and (optional) **rewrite** files to the ESP. This is trivial with the PIO extension. But follow [this guide](https://randomnerdtutorials.com/esp32-vs-code-platformio-spiffs/) if you have issues. Make sure to research your board to determine its specific capacity. 
 
 ### Upload the sketch
 
