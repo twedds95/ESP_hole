@@ -23,8 +23,8 @@ struct DomainStat
 const std::array<const DomainStat*, TOP_N> getTopBlockedArr();
 const std::array<const DomainStat*, TOP_N> getTopQueriedArr();
 
-const std::unordered_map<std::string, DomainStat> &getTopBlockedMap();
-const std::unordered_map<std::string, DomainStat> &getTopQueriedMap();
+const std::unordered_map<std::string, DomainStat> *getTopBlockedMap();
+const std::unordered_map<std::string, DomainStat> *getTopQueriedMap();
 
 void saveTopStats();
 void loadCachedTopStats();

@@ -271,14 +271,14 @@ const std::array<const DomainStat *, TOP_N> getTopQueriedArr()
     return getTopN(topQueriedMap);
 }
 
-const std::unordered_map<std::string, DomainStat> &getTopBlockedMap()
+const std::unordered_map<std::string, DomainStat> *getTopBlockedMap()
 {
-    return topBlockedMap;
+    return &topBlockedMap;
 }
 
-const std::unordered_map<std::string, DomainStat> &getTopQueriedMap()
+const std::unordered_map<std::string, DomainStat> *getTopQueriedMap()
 {
-    return topQueriedMap;
+    return &topQueriedMap;
 }
 
 void saveTopStats()

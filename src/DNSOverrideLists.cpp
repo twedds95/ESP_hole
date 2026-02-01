@@ -169,19 +169,19 @@ namespace
 }
 
 // Getter functions
-const std::unordered_map<std::string, IPAddress> &getRewriteRules()
+const std::unordered_map<std::string, IPAddress> *getRewriteRules()
 {
-    return rewriteRules;
+    return &rewriteRules;
 }
 
-const std::unordered_set<std::string> &getWhiteList()
+const std::unordered_set<std::string> *getWhiteList()
 {
-    return whiteList;
+    return &whiteList;
 }
 
-const std::unordered_set<std::string> &getBlockList()
+const std::unordered_set<std::string> *getBlockList()
 {
-    return blockList;
+    return &blockList;
 }
 
 // Add functions

@@ -38,6 +38,7 @@ enum class ESPHOLE_LOGLEVEL : uint8_t
 
 #define SERIAL_DEBUG false
 #define serialPrintLogf(...) do { if (SERIAL_DEBUG) Serial.printf(__VA_ARGS__); } while (0)
+#define HEAP_LOG(loc) Serial.printf("[%s] %s - heap=%u min=%u\n", LOG_TAG(ESPHOLE_LOGTYPES::STATS), loc, ESP.getFreeHeap(), ESP.getMinFreeHeap())
 
 void dualPrintLogf(ESPHOLE_LOGLEVEL logLevel, ESPHOLE_LOGTYPES tagEnum, const char *fmt, ...);
 void setupLogs(ESPHOLE_LOGLEVEL lvl);

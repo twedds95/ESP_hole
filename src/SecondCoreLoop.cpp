@@ -79,7 +79,7 @@ void enqueueDnsLog(bool blocked,
                    bool wasSentUpstream,
                    uint32_t resolvMs,
                    uint32_t processMs,
-                   String logMsg,
+                   const char *logMsg,
                    IPAddress ip)
 {
     if (!dnsLogQueue)
@@ -92,7 +92,7 @@ void enqueueDnsLog(bool blocked,
     ev.wasSentUpstream = wasSentUpstream;
     ev.ip = ip;
     strncpy(ev.domain, domain, MAX_DOMAIN_LEN - 1);
-    strncpy(ev.logMsg, logMsg.c_str(), MAX_LOG_MSG_LEN - 1);
+    strncpy(ev.logMsg, logMsg, MAX_LOG_MSG_LEN - 1);
 
     // Do NOT block DNS if queue is full
     xQueueSend(dnsLogQueue, &ev, 0);
