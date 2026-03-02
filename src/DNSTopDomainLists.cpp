@@ -101,17 +101,15 @@ namespace
                               "A domain with a count of 0 is still cached -- this should not happen.");
             }
 
-            DomainStat stat{};
-            strncpy(stat.domain, tempStat.domain, MAX_DOMAIN_LEN);
-            stat.count = 1;
-            stat.wasSentUpstream = tempStat.wasSentUpstream;
-            strncpy(stat.ip, tempStat.ip, MAX_IP_LEN);
             double_t domPercentEstimate = (double_t)tempStat.count / totalQueries;
             uint32_t decayAmount = (uint32_t)(domPercentEstimate * percent * tempStat.count);
-            stat.count = tempStat.count - decayAmount;
-            if (stat.count <= 0)
+            if (decayAmount > tempStat.count)
             {
-                domainsToErase.push_back(stat.domain);
+                domainsToErase.push_back(tempStat.domain);
+            }
+            else
+            {
+                domMap[tempStat.domain].count = tempStat.count - decayAmount;
             }
         }
 
@@ -126,22 +124,19 @@ namespace
         char domain[MAX_DOMAIN_LEN];
         sanitizeDomain(dom, domain);
 
+        // Check if exists
+        auto it = domMap.find(domain);
+        if (it != domMap.end())
+        {
+            it->second.count++;
+            return;
+        }
+
         DomainStat stat{};
         strncpy(stat.domain, domain, MAX_DOMAIN_LEN);
         stat.count = 1;
         stat.wasSentUpstream = wasSentUpstream;
         strncpy(stat.ip, ip.toString().c_str(), MAX_IP_LEN);
-
-        // Check if exists
-        auto it = domMap.find(domain);
-        if (it != domMap.end())
-        {
-            stat.count = it->second.count + 1;
-            // cached items are not sent upstream so keep initial flag from first call
-            stat.wasSentUpstream = it->second.wasSentUpstream;
-            it->second.count++;
-            return;
-        }
 
         // Check room for tracking
         if (domMap.size() >= TOP_N_TRACKED)
