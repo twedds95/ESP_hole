@@ -2,7 +2,6 @@
 #define ESPLOGS_H
 
 #include <Arduino.h>
-#include <SPIFFS.h>
 
 #define logName "/esplogs"
 #define MAX_LOGS 3

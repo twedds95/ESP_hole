@@ -5,7 +5,6 @@
 
 namespace
 {
-    uint32_t lastFlush = 0;
     ESPHOLE_LOGLEVEL LOG_LEVEL = ESPHOLE_LOGLEVEL::INFO; // default
 
     File rollLog()
@@ -29,7 +28,7 @@ namespace
         }
 
         String newLog = String(logName);
-        File logFile = SPIFFS.open(newLog, FILE_WRITE);
+        File logFile = SPIFFS.open(newLog, FILE_WRITE, true);
         dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
                       ESPHOLE_LOGTYPES::CODE,
                       "Created new Log %s",
@@ -68,7 +67,16 @@ void dualPrintLogf(ESPHOLE_LOGLEVEL logLevel, ESPHOLE_LOGTYPES tagEnum, const ch
     if (logLevel > LOG_LEVEL || logLevel > ESPHOLE_LOGLEVEL::INFO)
         return;
 
-    File logFile = SPIFFS.open(logName, FILE_APPEND);
+    File logFile;
+    if (SPIFFS.exists(logName))
+    {
+        logFile = SPIFFS.open(logName, FILE_APPEND, true);
+    }
+    else
+    {        
+        logFile = SPIFFS.open(logName, FILE_WRITE, true);
+    }
+
     if (!logFile)
     {
         Serial.println("Logfile not found.");
@@ -78,6 +86,7 @@ void dualPrintLogf(ESPHOLE_LOGLEVEL logLevel, ESPHOLE_LOGTYPES tagEnum, const ch
     static const int8_t MAX_LOG_SIZE = 5; // kb / log
     if (logFile.size() > MAX_LOG_SIZE * 1024)
     {
+        logFile.close();
         logFile = rollLog();
     }
 
@@ -85,11 +94,6 @@ void dualPrintLogf(ESPHOLE_LOGLEVEL logLevel, ESPHOLE_LOGTYPES tagEnum, const ch
     if (logFile)
     {
         logFile.write((uint8_t *)buf, len);
-        if (millis() - lastFlush > 1000)
-        {
-            logFile.flush();
-            lastFlush = millis();
-        }
     }
 
     logFile.close();
@@ -98,7 +102,7 @@ void dualPrintLogf(ESPHOLE_LOGLEVEL logLevel, ESPHOLE_LOGTYPES tagEnum, const ch
 void setupLogs(ESPHOLE_LOGLEVEL lvl)
 {
     LOG_LEVEL = lvl;
-    File logFile = SPIFFS.open(logName, FILE_APPEND);
+    File logFile = SPIFFS.open(logName, FILE_APPEND, true);
     if (!logFile)
     {
         Serial.println("Logfile not opened.");

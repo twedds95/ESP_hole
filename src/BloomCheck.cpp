@@ -77,7 +77,13 @@ namespace
     int victim = findLRUVictim();
 
     if (pages[victim].open)
+    {
       pages[victim].file.close();
+      pages[victim].open = false;
+      pages[victim].pageIndex = 0xFFFF;
+      pages[victim].lastUse = 0;
+      pages[victim].file = File();
+    }
 
     char path[32];
     snprintf(path, sizeof(path), "/bloom%u.bin", pageIndex);
@@ -91,11 +97,10 @@ namespace
       return nullptr;
     }
 
-    pages[victim] = {
-        .open = true,
-        .pageIndex = pageIndex,
-        .lastUse = now,
-        .file = f};
+    pages[victim].open = true;
+    pages[victim].pageIndex = pageIndex;
+    pages[victim].lastUse = now;
+    pages[victim].file = f;
 
     return &pages[victim];
   }

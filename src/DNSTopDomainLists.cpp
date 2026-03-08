@@ -168,7 +168,7 @@ namespace
 
     void saveTopStats(const char *path, const std::unordered_map<std::string, DomainStat> map)
     {
-        File f = SPIFFS.open(String(path) + ".tmp", FILE_WRITE);
+        File f = SPIFFS.open(String(path) + ".tmp", FILE_WRITE, true);
         if (!f)
         {
             dualPrintLogf(ESPHOLE_LOGLEVEL::ERROR,
@@ -192,7 +192,11 @@ namespace
         }
 
         f.close();
-        SPIFFS.remove(path);
+        if (SPIFFS.exists(path))
+        {
+            SPIFFS.remove(path);
+        }
+
         SPIFFS.rename(String(path) + ".tmp", path);
         dualPrintLogf(ESPHOLE_LOGLEVEL::DEBUG,
                       ESPHOLE_LOGTYPES::STATS,

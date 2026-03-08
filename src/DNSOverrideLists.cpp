@@ -16,7 +16,7 @@ namespace
 
     bool addListEntry(const String &entry, const char *fName, std::unordered_set<std::string> &list)
     {
-        File f = SPIFFS.open(fName, FILE_APPEND);
+        File f = SPIFFS.open(fName, FILE_APPEND, true);
         if (!f)
         {
             dualPrintLogf(ESPHOLE_LOGLEVEL::ERROR, ESPHOLE_LOGTYPES::SPIFFS, "Failed to open %s file\n", fName);
@@ -56,7 +56,7 @@ namespace
             return false;
         }
 
-        File f = SPIFFS.open(fName, FILE_WRITE);
+        File f = SPIFFS.open(fName, FILE_WRITE, true);
         if (!f)
         {
             dualPrintLogf(ESPHOLE_LOGLEVEL::ERROR, ESPHOLE_LOGTYPES::SPIFFS, "Failed to rewrite %s\n", fName);
@@ -187,7 +187,7 @@ const std::unordered_set<std::string> *getBlockList()
 // Add functions
 bool addRewriteRule(const char *domain, const char *ipStr)
 {
-    File f = SPIFFS.open("/rewrite", FILE_APPEND);
+    File f = SPIFFS.open("/rewrite", FILE_APPEND, true);
     if (!f)
     {
         dualPrintLogf(ESPHOLE_LOGLEVEL::ERROR, ESPHOLE_LOGTYPES::SPIFFS, "Failed to open rewrite file");
